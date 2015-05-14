@@ -3,7 +3,7 @@ karma~ by Rodrigo Constanzo & raja
 
 The karma~ object is a dynamically lengthed varispeed sample-recording and playback object with complex functionality, which references the audio information stored in a buffer~ object having the same name.
 
-For the mac version (.mxo) there are 2 versions of the external included (along with the help file). The (b) version is the 32/64bit version that will run in any version of Max (5/6/7, or 32/64). The non-b version is a purely 64bit external. The features in both are the same, it just has to do with how things are calculated internally. The windows version (.mxe) is only 32bit for now.
+For the mac version (.mxo) there are 2 versions of the external included (along with the help file). The (b) version is the 32/64bit version that will run in any version of Max (5/6/7, or 32/64). The non-b version is a purely 64bit external. The features in both are the same, it just has to do with how things are calculated internally. The windows version comes in the form of a 32bit version (.mxe) and a 64bit version (.mxe64).
 
 You can find out more information and download the latest version here:
 http://www.rodrigoconstanzo.com/karma
