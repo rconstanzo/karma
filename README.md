@@ -14,6 +14,13 @@ https://github.com/rconstanzo/karma
 ==================================
 
 
+To build karma~ on your machine, clone this git repo into the `source` directory of the Max SDK.
+
+For example, if your Max SDK lives in `~/Documents/Max 7/Packages/max-sdk-7.1.0`, then the path to the Xcode project for the (b) version of the external should be at `~/Documents/Max 7/Packages/max-sdk-7.1.0/source/karma/karma~(b)/karma~.xcodeproj`
+
+If you choose to place the git repo somewhere else on your system, the project won't build immediately after cloning, and you will have to futz with the build configuraiton in order to get it working.
+
+
 ==================================
 
 Copyright (c) 2015, Rodrigo Constanzo
