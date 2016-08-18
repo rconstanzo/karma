@@ -1038,6 +1038,7 @@ void karma_mperf(t_karma *x, t_object *dsp64, double **ins, long nins, double **
     }
 
     if (dirt) { buffer_setdirty(buf); }                                //notify other buf-related objs of write
+	buffer_unlocksamples(buf);
     if (x->clockgo) { clock_delay(x->tclock, 0); x->clockgo = 0; }    //list-outlet stuff
     else if (!go) { clock_unset(x->tclock); x->clockgo = 1; }
     x->oLprev = oLprev;
@@ -2107,6 +2108,7 @@ void karma_sperf(t_karma *x, t_object *dsp64, double **ins, long nins, double **
     }
 
     if (dirt) { buffer_setdirty(buf); }                                //notify other buf-related objs of write
+	buffer_unlocksamples(buf);
     if (x->clockgo) { clock_delay(x->tclock, 0); x->clockgo = 0; }    //list-outlet stuff
     else if (!go) { clock_unset(x->tclock); x->clockgo = 1; }
     x->oLprev = oLprev;
