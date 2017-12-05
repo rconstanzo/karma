@@ -1,14 +1,21 @@
-karma~ by Rodrigo Constanzo & raja
+karma~ by Rodrigo Constanzo & raja & pete
 ==================================
 
 The karma~ object is a dynamically lengthed varispeed sample-recording and playback object with complex functionality, which references the audio information stored in a buffer~ object having the same name.
 
-For the mac version (.mxo) there are 2 versions of the external included (along with the help file). The (b) version is the 32/64bit version that will run in any version of Max (5/6/7, or 32/64). The non-b version is a purely 64bit external. The features in both are the same, it just has to do with how things are calculated internally. The windows version comes in the form of a 32bit version (.mxe) and a 64bit version (.mxe64).
+Version 1.1 (current public release):
+For the mac version (.mxo) there are 2 versions of the external included (along with the help file). The (b) version is the 32/64bit version that will run in any version of Max (versions 5 or 6 or 7, 32 or 64 bit). The non-b version is a purely 64-bit external. The features in both are the same. The windows version comes in the form of a 32-bit version (.mxe) and a 64-bit version (.mxe64).
 
-You can find out more information and download the latest version here:
+Version 1.5 (current development version, fully functional):
+OS X only for now, 32 & 64 bit UB (.mxo). Like version 1.4 - feature additions and bug fixes. Up to 4 channels operation, optional audio rate sync outlet (object arg #3 flag), state-machine added to data (list) outlet, etc. pete takes over (from raja) from here.
+
+Version 2.0 (future version):
+Soon.
+
+You can find out more information and download the public release version here:
 http://www.rodrigoconstanzo.com/karma
 
-Or you can follow the GitHub repository here:
+You can follow the GitHub repository here:
 https://github.com/rconstanzo/karma
 
 ==================================
@@ -16,14 +23,14 @@ https://github.com/rconstanzo/karma
 
 To build karma~ on your machine, clone this git repo into the `source` directory of the Max SDK.
 
-For example, if your Max SDK lives in `~/Documents/Max 7/Packages/max-sdk-7.1.0`, then the path to the Xcode project for the (b) version of the external should be at `~/Documents/Max 7/Packages/max-sdk-7.1.0/source/karma/karma~(b)/karma~.xcodeproj`
+For example, if your Max SDK lives in `~/Documents/Max 7/Packages/max-sdk-7.1.0`, then the path to the Xcode project for the 1.1 (b) version of the external should be at `~/Documents/Max 7/Packages/max-sdk-7.1.0/source/karma/karma~1.1/karma~(b)/karma~.xcodeproj`
 
 If you choose to place the git repo somewhere else on your system, the project won't build immediately after cloning, and you will have to futz with the build configuraiton in order to get it working.
 
 
 ==================================
 
-Copyright (c) 2015, Rodrigo Constanzo
+Copyright (c) 2015-2017, Rodrigo Constanzo
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -49,3 +56,4 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 The views and conclusions contained in the software and documentation are those
 of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
+
