@@ -7,7 +7,7 @@ Version 1.1 (current public release):
 For the mac version (.mxo) there are 2 versions of the external included (along with the help file). The (b) version is the 32/64bit version that will run in any version of Max (versions 5 or 6 or 7, 32 or 64 bit). The non-b version is a purely 64-bit external. The features in both are the same. The windows version comes in the form of a 32-bit version (.mxe) and a 64-bit version (.mxe64).
 
 Version 1.5 (current development version, fully functional):
-OS X only for now, 32 & 64 bit UB (.mxo). Like version 1.4 - feature additions and bug fixes. Up to 4 channels operation, optional audio rate sync outlet (object arg #3 flag), state-machine added to data (list) outlet, etc. pete takes over (from raja) from here.
+OS X only for now, 32 & 64 bit UB (.mxo). Like version 1.4 - feature additions and bug fixes. Up to 4 channels operation, optional audio rate sync outlet (object arg #3 flag), state-machine added to data (list) outlet, etc.
 
 Version 2.0 (future version):
 Soon.
