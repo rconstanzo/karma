@@ -61,10 +61,13 @@
 
 #include "stdlib.h"
 #include "math.h"
-#include "ext.h"
-#include "ext_obex.h"
-#include "ext_buffer.h"
-#include "z_dsp.h"
+
+#include "ext.h"            // max
+#include "ext_obex.h"       // api
+
+#include "ext_buffer.h"     // buffer~
+#include "z_dsp.h"          // msp
+
 #include "ext_atomic.h"
 
 
@@ -150,9 +153,11 @@ typedef struct _karma {
     t_bool  firstd;         // initial initialise
     t_bool  skip;           // is initialising = 0
     t_bool  buf_mod;
-    
+
+//    t_atom  datalist[7];  // !! TODO !!
+
     void    *tclock;
-    void    *messout;
+    void    *messout;       // data (list) outlet pointer
     
 } t_karma;
 
@@ -175,20 +180,21 @@ void karma_setup(t_karma *x, t_symbol *s);
 void karma_jump(t_karma *x, double j);
 void karma_append(t_karma *x);
 
+// dsp:
 void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long vecount, long flags);
 // mono:
-void karma_mperf(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr);
+void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr);
 // stereo:
-void karma_sperf(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr);
+void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr);
 // quad:
-void karma_qperf(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr);
+void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr);
 
 
 static t_symbol *ps_nothing, *ps_buffer_modified;
 static t_class *karma_class = NULL;
 
 
-// easing function for recording (ipoke)
+// easing function for recording (with ipoke)
 static inline double ease_record(double y1, char updwn, double ramp, t_ptr_int pfad)
 {
     double ifup    = (1.0 - (((double)pfad) / ramp)) * PI;
@@ -333,7 +339,7 @@ static inline void ease_bufon(t_ptr_int frms, float *b, t_ptr_int nchn, t_ptr_in
     return;
 }
 
-// interpolation points storage
+// interpolation points
 static inline void interp_index(t_ptr_int pos, t_ptr_int *indx0, t_ptr_int *indx1, t_ptr_int *indx2, t_ptr_int *indx3, char dir, char diro, t_ptr_int loop, t_ptr_int frmsm)
 {
     *indx0 = pos - dir;                                 // calc of indecies 4 interps
@@ -472,6 +478,14 @@ void ext_main(void *r)
     
     ps_nothing = gensym("");
     ps_buffer_modified = gensym("buffer_modified");
+
+    // identify build
+    post("-- karma~:");
+    post("version 1.5 beta");
+    post("designed by Rodrigo Constanzo");
+    post("original version to 1.4 developed and coded by raja");
+    post("1.5 updates by pete");
+    post("--");
 }
 
 void *karma_new(t_symbol *s, short argc, t_atom *argv)
@@ -485,13 +499,13 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
     x = (t_karma *)object_alloc(karma_class);
     x->skip = 0;
 
+    // !! TODO: argument checks !!
     if (attrstart && argv) {
         bufname = atom_getsym(argv);
         // @arg 0 @name buffer_name @optional 0 @type symbol @digest Name of <o>buffer~</o> to be associated with the <o>karma~</o> instance
         // @description Essential argument: <o>karma~</o> will not operate without an associated <o>buffer~</o> <br />
         // The associated <o>buffer~</o> determines memory and length (if associating a buffer~ of <b>0 ms</b> in size <o>karma~</o> will do nothing) <br />
         // The associated <o>buffer~</o> can be changed on the fly (see the <m>set</m> message) but one must be present on instantiation <br />
-
         if (attrstart > 1) {
             chans = atom_getlong(argv + 1);
             if (attrstart > 2) {
@@ -547,7 +561,7 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
         // If <b>2</b>, <o>karma~</o> will operate in stereo mode with two inputs for recording and two outputs for playback <br />
         // If <b>4</b>, <o>karma~</o> will operate in quad mode with four inputs for recording and four outputs for playback <br />
 
-        x->messout = listout(x);    // data outlet
+        x->messout = listout(x);    // data outlet using void* listout (void * x)
         x->tclock = clock_new((t_object * )x, (method)karma_listclock);
         attr_args_process(x, argc, argv);
         
@@ -693,6 +707,8 @@ void karma_bufchange(t_karma *x, t_symbol *s, short argc, t_atom *argv)
 
 void karma_listclock(t_karma *x)
 {
+//    t_atom datalist[7];
+
     if (x->rprtime != 0)    // ('rprtime 0' == off, else milliseconds)
     {
         t_ptr_int frames = x->bframes - 1;
@@ -717,8 +733,9 @@ void karma_listclock(t_karma *x)
         atom_setfloat(  datalist + 5, ((xtlwin * loop) / bmsr)  );                                                      // window float
         atom_setlong(   datalist + 6,   statehuman  );                                                                  // state flag
         
-        outlet_list(x->messout, 0L, 7, datalist);   // &datalist ?!
-        
+//        outlet_list(x->messout, 0L, 7, datalist);   // !!
+        outlet_list(x->messout, gensym("list"), 7, datalist);   // !! &datalist ?!  why is this wrong ??
+
         if (sys_getdspstate() && (x->rprtime > 0)) {
             clock_delay(x->tclock, x->rprtime);
         }
@@ -985,7 +1002,7 @@ void karma_jump(t_karma *x, double j)
         } else {
             x->statecontrol = 8;
             x->jump = j;
-            x->statehuman = 1;                  // hmmm... ...
+            x->statehuman = 1;                  // ?? ...
             x->stopallowed = 1;
         }
     }
@@ -1009,15 +1026,15 @@ void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long v
             karma_setup(x, x->bufname);
         if (x->chans > 1) {
             if (x->chans > 2) {
-                object_method(dsp64, gensym("dsp_add64"), x, karma_qperf, 0, NULL);
-                post("karma~_64bit_v1.5_quad");
+                object_method(dsp64, gensym("dsp_add64"), x, karma_quad_perform, 0, NULL);
+                //post("karma~_64bit_v1.5_quad");
             } else {
-                object_method(dsp64, gensym("dsp_add64"), x, karma_sperf, 0, NULL);
-                post("karma~_64bit_v1.5_stereo");
+                object_method(dsp64, gensym("dsp_add64"), x, karma_stereo_perform, 0, NULL);
+                //post("karma~_64bit_v1.5_stereo");
             }
         } else {
-            object_method(dsp64, gensym("dsp_add64"), x, karma_mperf, 0, NULL);
-            post("karma~_64bit_v1.5_mono");
+            object_method(dsp64, gensym("dsp_add64"), x, karma_mono_perform, 0, NULL);
+            //post("karma~_64bit_v1.5_mono");
         }
         if (!x->firstd) {
             karma_window(x, 1.);
@@ -1039,7 +1056,7 @@ void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long v
 
 // mono perform
 
-void karma_mperf(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr)
+void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr)
 {
     long syncoutlet = x->syncoutlet;
 
@@ -2067,7 +2084,7 @@ zero:
 
 // stereo perform
 
-void karma_sperf(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr)
+void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr)
 {
     long syncoutlet = x->syncoutlet;
     
@@ -4007,7 +4024,7 @@ zero:
 
 // quad perform
 
-void karma_qperf(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr)
+void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr)
 {
     long syncoutlet = x->syncoutlet;
     
