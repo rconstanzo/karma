@@ -50,7 +50,9 @@
 //  //  //  N.B. - [at]-commenting for 'DoctorMax' auto documentation
 
 //  //  //  TODO version 1.5:
-//  //  //  fix: a bunch of stuff
+//  //  //  fix: a bunch of stuff, incl. ...
+//  //  //  - all buffer 'set' etc bugs
+//  //  //  - statemachine ('statehuman') overdub notify bug
 
 //  //  //  TODO version 2.0:
 //  //  //  rewrite completely, take multiple perform routines out
@@ -79,21 +81,23 @@
 #define SPLINE_INTERP(f, w, x, y, z) (((-0.5*w + 1.5*x - 1.5*y + 0.5*z)*f*f*f) + ((w - 2.5*x + y + y - 0.5*z)*f*f) + ((-0.5*w + 0.5*y)*f) + x)
 // ^^ 'SPLINE_INTERP' should be 'void inline' to save on f multiplies   // ^^                               // ^^                           // ??
 
+//#define karma_sort(low, high) (MIN(low, high), MAX(low, high))
 
+// karma~
 typedef struct _karma {
     
     t_pxobject       ob;
     t_buffer_ref    *buf;
     t_symbol        *bufname;
-    
-    double  pos;            // play head
+
+    double  pos;            // play (phase) head
     double  maxpos;
     double  jump;           // jump phase 0..1
     double  extlwin;        // window (selection) length
     double  xstart;         // (start) position
     double  sr;             // samplerate
-    double  bmsr;
-    double  srscale;        // buffer / sr scaling factor
+    double  bmsr;           // buffer sr in samples-per-millisecond
+    double  srscale;        // scaling factor: buffer sr / system sr
     double  prev;
     double  o1prev;
     double  o2prev;
@@ -110,7 +114,10 @@ typedef struct _karma {
     double  fad;
     double  ovdb;
     double  ovd;
-    
+
+    long    vs;             // vectorsize
+    long    syncoutlet;     // make sync outlet ? (object arg #3: 0/1 flag)
+
     t_ptr_int   numof;
     t_ptr_int   loop;
     t_ptr_int   islooped;   // can disable/enable looping status (attr request)
@@ -119,17 +126,16 @@ typedef struct _karma {
     t_ptr_int   rpos;
     t_ptr_int   rfad;       // fade-counter for recording
     t_ptr_int   pfad;       // fade-counter for playback
-    t_ptr_int   bframes;
+    t_ptr_int   bframes;    // buffer size in samples
     t_ptr_int   bchans;     // number of buffer channels
+    t_ptr_int   boffset;    // zero-indexed buffer channel # (default 0), user settable, not buffer~ queried
     t_ptr_int   chans;      // number of audio channels choice (object arg #2: 1 / 2 / 4)
-    t_ptr_int   ramp;
-    t_ptr_int   snramp;
+    t_ptr_int   ramp;       // ramp time in samples
+    t_ptr_int   snramp;     // switch n ramp time in samples
     t_ptr_int   rprtime;    // right list outlet report granularity in ms
-    t_ptr_int   curv;
+    t_ptr_int   curv;       // switch n ramp curve choice
     t_ptr_int   interpflag; // playback interpolation, 0 = linear, 1 = cubic, 2 = spline
     
-    long    syncoutlet;     // make sync outlet ? (object arg #3: 0/1 flag)
-
     char    statecontrol;   // master looper state control (not 'human state')
     char    statehuman;     // master looper state human logic (not 'statecontrol') (0=stop, 1=play, 2=record, 3=overdub, 4=append 5=initial)
     char    pupdwn;         // playback up/down flag, 0 = fade up/in, 1 = fade down/out
@@ -140,7 +146,7 @@ typedef struct _karma {
     
     t_bool  stopallowed;    // flag, '0' if already stopped once (& init) [could have just used 'firstd' ??]
     t_bool  append;         // append
-    t_bool  go;             // execute
+    t_bool  go;             // execute play
     t_bool  rec;            // record ?
     t_bool  recpre;         // initial record ?
     t_bool  looprec;        // loop recording
@@ -152,33 +158,38 @@ typedef struct _karma {
     t_bool  first;          // initial recording
     t_bool  firstd;         // initial initialise
     t_bool  skip;           // is initialising = 0
-    t_bool  buf_mod;
+    t_bool  buf_mod;        // buffer has been modified flag
 
-//    t_atom  datalist[7];  // !! TODO !!
+//  t_atom  datalist[7];    // !! TODO - store list ??
+    void    *tclock;        // list timer pointer
+    void    *messout;       // list outlet pointer
 
-    void    *tclock;
-    void    *messout;       // data (list) outlet pointer
-    
 } t_karma;
 
 
-void *karma_new(t_symbol *s, short argc, t_atom *argv);
-void karma_free(t_karma *x);
-void karma_stop(t_karma *x);
-void karma_play(t_karma *x);
-void karma_record(t_karma *x);
-void karma_start(t_karma *x, double strt);
-t_max_err karmabuf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat);
-void karma_assist(t_karma *x, void *b, long m, long a, char *s);
-void karma_dblclick(t_karma *x);
-void karma_overdub(t_karma *x, double o);
-void karma_window(t_karma *x, double dur);
-void karma_modset(t_karma *x, t_buffer_obj *b);
-void karma_listclock(t_karma *x);
-void karma_bufchange(t_karma *x, t_symbol *s, short argc, t_atom *argv);
-void karma_setup(t_karma *x, t_symbol *s);
-void karma_jump(t_karma *x, double j);
-void karma_append(t_karma *x);
+void       *karma_new(t_symbol *s, short argc, t_atom *argv);
+void        karma_free(t_karma *x);
+
+void        karma_stop(t_karma *x);
+void        karma_play(t_karma *x);
+void        karma_record(t_karma *x);
+void        karma_start(t_karma *x, double strt);
+
+t_max_err   karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat);
+
+void        karma_assist(t_karma *x, void *b, long m, long a, char *s);
+void        karma_buf_dblclick(t_karma *x);
+
+void        karma_overdub(t_karma *x, double o);
+void        karma_window(t_karma *x, double dur);
+
+void        karma_buf_setup(t_karma *x, t_symbol *s);
+void        karma_buf_modset(t_karma *x, t_buffer_obj *b);
+void        karma_clock_list(t_karma *x);
+void        karma_buf_change(t_karma *x, t_symbol *s, short argc, t_atom *argv);
+
+void        karma_jump(t_karma *x, double j);
+void        karma_append(t_karma *x);
 
 // dsp:
 void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long vecount, long flags);
@@ -190,10 +201,16 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
 void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr);
 
 
-static t_symbol *ps_nothing, *ps_buffer_modified;
-static t_class *karma_class = NULL;
+static  t_symbol    *ps_nothing, *ps_buffer_modified;
+static  t_class     *karma_class = NULL;
 
-
+/*
+// dumb
+inline double sort_double(double low, double high)  // surely this is bullshit ?
+{
+    return MIN(low, high), MAX(low, high);
+}
+*/
 // easing function for recording (with ipoke)
 static inline double ease_record(double y1, char updwn, double ramp, t_ptr_int pfad)
 {
@@ -429,16 +446,16 @@ void ext_main(void *r)
     // @marg 0 @name buffer_name @optional 0 @type symbol
     // @marg 1 @name start_point @optional 1 @type float
     // @marg 2 @name end_point @optional 1 @type float
-    class_addmethod(c, (method)karma_bufchange, "set",      A_GIMME,    0);
+    class_addmethod(c, (method)karma_buf_change, "set",     A_GIMME,    0);
     // @method overdub @digest overdubbing amplitude
     // @description amplitude (0..1) for when in overdubbing state <br />
     // @marg 0 @name overdub @optional 0 @type float
     class_addmethod(c, (method)karma_overdub,   "overdub",  A_FLOAT,    0);
     
-    class_addmethod(c, (method)karma_dsp64,     "dsp64",    A_CANT,     0);
-    class_addmethod(c, (method)karma_assist,    "assist",   A_CANT,     0);
-    class_addmethod(c, (method)karma_dblclick,  "dblclick", A_CANT,     0);
-    class_addmethod(c, (method)karmabuf_notify, "notify",   A_CANT,     0);
+    class_addmethod(c, (method)karma_dsp64,         "dsp64",    A_CANT, 0);
+    class_addmethod(c, (method)karma_assist,        "assist",   A_CANT, 0);
+    class_addmethod(c, (method)karma_buf_dblclick,  "dblclick", A_CANT, 0);
+    class_addmethod(c, (method)karma_buf_notify,    "notify",   A_CANT, 0);
 
     CLASS_ATTR_LONG(c, "report", 0, t_karma, rprtime);
     CLASS_ATTR_FILTER_MIN(c, "report", 0);
@@ -533,8 +550,9 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
         x->rpos = -1;
         x->rprtime = 50;
         x->snramp = x->ramp = 256;
-        x->pfad = x->rfad = 257;
+        x->pfad = x->rfad = 257;    // ??
         x->sr = sys_getsr();
+        x->vs = sys_getblksize();
         x->ovd = x->ovdb = 1.0;
         x->islooped = x->curv = x->interpflag = 1;
         x->pupdwn = x->rupdwn = x->first = x->firstd = x->append = x->jnoff = x->statecontrol = x->statehuman = x->stopallowed = 0;
@@ -548,7 +566,7 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
         else
             object_error((t_object *)x, "requires an associated buffer~ declaration");
         
-        x->syncoutlet = syncoutlet; // sync outlet
+        x->syncoutlet = syncoutlet;
         // @arg 2 @name sync_outlet @optional 1 @type int @digest Create audio rate sync position outlet ?
         // @description Default = <b>0 (off)</b> <br />
         // If <b>on</b>, <o>karma~</o> will have an additional outlet, after the audio channel outlets,
@@ -561,8 +579,8 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
         // If <b>2</b>, <o>karma~</o> will operate in stereo mode with two inputs for recording and two outputs for playback <br />
         // If <b>4</b>, <o>karma~</o> will operate in quad mode with four inputs for recording and four outputs for playback <br />
 
-        x->messout = listout(x);    // data outlet using void* listout (void * x)
-        x->tclock = clock_new((t_object * )x, (method)karma_listclock);
+        x->messout = listout(x);    // data
+        x->tclock = clock_new((t_object * )x, (method)karma_clock_list);
         attr_args_process(x, argc, argv);
         
         if (chans <= 1) {           // mono
@@ -582,7 +600,7 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
             outlet_new(x, "signal");        // second: audio output 2
             outlet_new(x, "signal");        // first: audio output 1
         }
-        
+
         x->skip = 1;
         x->ob.z_misc |= Z_NO_INPLACE;
     }
@@ -601,12 +619,12 @@ void karma_free(t_karma *x)
     }
 }
 
-void karma_dblclick(t_karma *x)
+void karma_buf_dblclick(t_karma *x)
 {
     buffer_view(buffer_ref_getobject(x->buf));
 }
 
-void karma_setup(t_karma *x, t_symbol *s)
+void karma_buf_setup(t_karma *x, t_symbol *s)
 {
     t_buffer_obj *buf;
     x->bufname = s;
@@ -635,17 +653,17 @@ void karma_setup(t_karma *x, t_symbol *s)
     }
 }
 
-void karma_modset(t_karma *x, t_buffer_obj *b)
+void karma_buf_modset(t_karma *x, t_buffer_obj *b)
 {
     double bsr, bmsr;
     t_ptr_int chans;
     t_ptr_int frames;
     
     if (b) {
-        bsr = buffer_getsamplerate(b);
-        chans = buffer_getchannelcount(b);
-        frames = buffer_getframecount(b);
-        bmsr = buffer_getmillisamplerate(b);
+        bsr     = buffer_getsamplerate(b);
+        chans   = buffer_getchannelcount(b);
+        frames  = buffer_getframecount(b);
+        bmsr    = buffer_getmillisamplerate(b);
         
         if (((x->bchans != chans) || (x->bframes != frames)) || (x->bmsr != bmsr)) {
             x->bmsr = bmsr;
@@ -660,55 +678,250 @@ void karma_modset(t_karma *x, t_buffer_obj *b)
     }
 }
 
-void karma_bufchange(t_karma *x, t_symbol *s, short argc, t_atom *argv)
+// pete says: i know this is all completely horrible, will rewrite soon...
+void karma_buf_change(t_karma *x, t_symbol *s, short argc, t_atom *argv) // " set ..... "
 {
     t_buffer_obj *buf;
-    t_symbol *b = atom_getsym(argv);
-    
-    if (b != ps_nothing) {
-        x->bufname = b;
-        
-        if (!x->buf)
-            x->buf = buffer_ref_new((t_object *)x, b);
-        else
-            buffer_ref_set(x->buf, b);
-        
-        buf = buffer_ref_getobject(x->buf);
-        
-        if (buf == NULL) {
-            x->buf = 0;
-            object_error((t_object *)x, "there is no buffer~ named '%s'", b->s_name);
-        } else {
-            x->diro = 0;
-            x->maxpos = x->pos = 0.0;
-            x->rpos = -1;
-            x->bchans = buffer_getchannelcount(buf);
-            x->bframes = buffer_getframecount(buf);
-            x->bmsr = buffer_getmillisamplerate(buf);
-            x->srscale = buffer_getsamplerate(buf) / x->sr;
+    t_symbol *b;
+    t_symbol *loop_points_sym;
+    long loop_points_flag = 2;          // specify start/end loop points: 0 = in phase, 1 = in samples, 2 = in milliseconds (default)
+    double templow, templowtemp, temphigh, temphightemp, bframesms, vsnorm;
+    templow = templowtemp = -1.0;
+    temphigh = temphightemp = -1.0;
+
+    // error checking etc first .....
+
+    if (argc <= 0)
+    {
+        object_error((t_object *) x, "'%s' message must be followed by argument(s) - it does nothing alone", s->s_name);
+        return;
+
+    } else {
+
+        if (atom_gettype(argv + 0) == A_SYM) {
             
-            if (argc <= 1) {
-                x->start = 0.0;
-                x->loop = x->end = x->bframes - 1;
+            b = atom_getsym(argv + 0);
+            
+        } else {
+            
+            object_error((t_object *)x, "first argument to '%s' message must be a symbol (associated buffer~ name)", s->s_name);
+            return;
+            
+        }
+        
+        if (b == ps_nothing)
+        {
+            object_error((t_object *)x, "'%s' requires a valid buffer~ declaration, none found", s->s_name);
+            return;
+        
+        } else if ( (b == x->bufname) && (argc <= 1) ) {    // if same buffer~ name with no additional args, else take new args...
+            
+            object_warn((t_object *)x, "buffer~ '%s' is already set!", x->bufname); // 'warn' only ok here ?
+            return;
+            
+        } else {
+
+    // do it .....
+
+            x->bufname = b;
+            
+            if (!x->buf)
+                x->buf = buffer_ref_new((t_object *)x, b);
+            else
+                buffer_ref_set(x->buf, b);
+            
+            buf = buffer_ref_getobject(x->buf);
+            
+            if (buf == NULL) {
+                
+                x->buf = 0;
+                object_error((t_object *)x, "cannot find any buffer~ named '%s'", b->s_name);
+                return;                     // !! ??
+
+            } else {                        // should this be called via defered thread ??
+                
+                if (x->stopallowed == 0) {  // ?? surely these should not be (re)set here ?? ... [should only be if NOT playing ??]
+                    x->diro = 0;
+                    x->maxpos = x->pos = 0.0;
+                    x->rpos = -1;
+                }
+                x->bchans   = buffer_getchannelcount(buf);
+                x->bframes  = buffer_getframecount(buf);
+                x->bmsr     = buffer_getmillisamplerate(buf);
+                x->srscale  = buffer_getsamplerate(buf) / x->sr;
+
+                bframesms   = 1000. * ((double)x->bframes - 1) / x->sr; // buffersize in milliseconds
+                vsnorm      = (double)x->vs / ((double)x->bframes - 1); // vectorsize in (double) % 0..1 phase units of buffer~
+
+                // maximum length message (6 atoms after 'set') = " set ...
+                // ... 0::symbol::buffername [1::float::loop start] [2::float::loop end] [3::symbol::loop points type] ...
+                // ... [4::symbol::offset 5::int::channel # offset] "   // <<-- not implemented "offset n" yet
+                
+                if (argc >= 4) {
+                    
+                    if (argc > 4)
+                        object_warn((t_object *) x, "too many arguments for '%s' message, truncating to first four args", s->s_name);
+                    
+                    if (atom_gettype(argv + 3) == A_SYM) {
+                        loop_points_sym = atom_getsym(argv + 3);
+                        if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )                // phase 0..1
+                            loop_points_flag = 0;
+                        else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )    // samples
+                            loop_points_flag = 1;
+                        else                                                                                                            // ms
+                            loop_points_flag = 2;
+                    } else if (atom_gettype(argv + 3) == A_LONG) {  // can just be int
+                        loop_points_flag = atom_getlong(argv + 3);
+                    } else if (atom_gettype(argv + 3) == A_FLOAT) { // convert if error float
+                        loop_points_flag = (long)atom_getfloat(argv + 3);
+                    } else {
+                        object_warn((t_object *) x, "'%s' message does not understand arg no.4, using milliseconds for args 2 & 3", s->s_name);
+                        loop_points_flag = 2;    // default ms
+                    }
+
+                    loop_points_flag = CLAMP(loop_points_flag, 0, 2);
+
+                }
+                
+                if (argc >= 3) {
+                    
+                    if (atom_gettype(argv + 2) == A_FLOAT) {
+                        temphigh = atom_getfloat(argv + 2);
+                        if (temphigh < 0.) {
+                            object_warn((t_object *) x, "'loop maximum' cannot be less than '0.', setting to '0.'");
+                            temphigh = 0.;
+                        }   // !! do maximum check later !!
+                    } else if (atom_gettype(argv + 2) == A_LONG) {
+                        temphigh = (double)atom_getlong(argv + 2);  // even if samples ??
+                        if (temphigh < 0.) {
+                            object_warn((t_object *) x, "'loop maximum' cannot be less than '0.', setting to '0.'");
+                            temphigh = 0.;
+                        }   // !! do maximum check later !!
+                    } else if ( (atom_gettype(argv + 2) == A_SYM) && (argc < 4) ) {
+                        temphigh = -1.;
+                        loop_points_sym = atom_getsym(argv + 2);
+                        if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )              // phase 0..1
+                                loop_points_flag = 0;
+                        else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )                            // samples
+                                loop_points_flag = 1;
+                        else if ( (loop_points_sym == gensym("milliseconds")) || (loop_points_sym == gensym("MS")) || (loop_points_sym == gensym("ms")) )               // ms
+                                loop_points_flag = 2;
+                        else
+                            object_warn((t_object *) x, "'%s' message does not understand arg no.3, setting unit to maximum", s->s_name);
+                    } else {
+                        temphigh = -1.;
+                        object_warn((t_object *) x, "'%s' message does not understand arg no.3, setting unit to maximum", s->s_name);
+                    }
+                }
+                    
+                if (argc >= 2) {
+
+                    if (atom_gettype(argv + 1) == A_FLOAT) {
+                        if (temphigh < 0.) {
+                            temphigh = atom_getfloat(argv + 1);
+                            templow = 0.;
+                        } else {
+                            templow = atom_getfloat(argv + 1);
+                            if (templow < 0.) {
+                                object_warn((t_object *) x, "'loop minimum' cannot be less than '0.', setting to '0.'");
+                                templow = 0.;
+                            }   // !! do maximum check later !!
+                        }
+                    } else if (atom_gettype(argv + 1) == A_LONG) {
+                        if (temphigh < 0.) {
+                            temphigh = (double)atom_getlong(argv + 1);  // even if samples ??
+                            templow = 0.;
+                        } else {
+                            templow = (double)atom_getlong(argv + 1);   // even if samples ??
+                            if (templow < 0.) {
+                                object_warn((t_object *) x, "'loop minimum' cannot be less than '0.', setting to '0.'");
+                                templow = 0.;
+                            }   // !! do maximum check later !!
+                        }
+                    } else {
+//                      temphigh = -1.;     // !! no - leave temphigh alone in case only arg #2 is an error
+                        templow = -1.;
+                        object_warn((t_object *) x, "'set' message does not understand arg no.2, setting loop points to minimum (and maximum)");
+                    }
+                    
+                }
+
+                // by this stage in routine, if templow < 0., it has not been set and should be set to default (0.) regardless of 'loop_points_flag'
+                if (templow < 0.)
+                    templow = 0.;
+
+                if (loop_points_flag == 0) {            // if PHASE
+                    // by this stage in routine, if temphigh < 0., it has not been set and should be set to default (the maximum phase 1.)
+                    if (temphigh < 0.)
+                        temphigh = 1.;                                      // already normalised 0..1
+                    //loop_points_sym = gensym("phase");
+                } else if (loop_points_flag == 1) {     // if SAMPLES
+                    // by this stage in routine, if temphigh < 0., it has not been set and should be set to default (the maximum phase 1.)
+                    if (temphigh < 0.)
+                        temphigh = 1.;                                      // already normalised 0..1
+                    else
+                        temphigh = temphigh / ((double)x->bframes - 1);                             // normalise samples 0..1..
+                    //loop_points_sym = gensym("samples");
+                } else {                                // if MILLISECONDS (default)
+                    // by this stage in routine, if temphigh < 0., it has not been set and should be set to default (the maximum phase 1.)
+                    if (temphigh < 0.)
+                        temphigh = 1.;                                      // already normalised 0..1
+                    else
+                        temphigh = temphigh / bframesms;                                            // normalise milliseconds 0..1..
+                        //temphigh = (x->sr * temphigh * 0.001) / ((double)x->bframes - 1);
+                    //loop_points_sym = gensym("ms");
+                }
+
+                // min/max & check & clamp once normalisation has occurred
+                templowtemp = templow;
+                templow     = MIN(templow, temphigh);           // templow, temphigh = sort_double(templow, temphigh);
+                temphigh    = MAX(templowtemp, temphigh);
+                if (templow > 1.) { // already sorted, so if this is case we know we are fucked
+                    object_warn((t_object *) x, "'loop minimum' cannot be greater than available buffer~ size, setting to buffer~ size minus vectorsize");
+                    templow = 1. - vsnorm;
+                }
+                if (temphigh > 1.) {
+                    object_warn((t_object *) x, "'loop maximum' cannot be greater than available buffer~ size, setting to buffer~ size");
+                    temphigh = 1.;
+                }
+                // finally check for minimum size ...
+                if ( (temphigh - templow) < vsnorm ) {
+                    object_warn((t_object *) x, "'loop size' ('loop maximum' - 'loop minimum') cannot be too small, minimum is 'vectorsize' internally (currently using '%ld' samples)", x->vs);
+                    if ( (templow - (vsnorm * 0.5)) < 0. ) {
+                        templow = 0.;
+                        temphigh = vsnorm;
+                    } else if ( (temphigh + (vsnorm * 0.5)) > 1. ) {
+                        temphigh = 1.;
+                        templow = 1. - vsnorm;
+                    } else {
+                        templow = templow - (vsnorm * 0.5);
+                        temphigh = temphigh + (vsnorm * 0.5);
+                    }
+                }
+                templow     = CLAMP(templow, 0., 1.);
+                temphigh    = CLAMP(temphigh, 0., 1.);
+
+                // !! NOW we should update additional data for list outlet ??
+
+                // !! fix: should retain previous % start pos & loop/end points ??
+                
+                // regardless of input choice ('loop_points_flag'), final system is normalised 0..1 (phase)
+                x->start = templow * (x->bframes - 1);          // !! (x->bframes - 1) parentheses here yes ?? ...
+                x->loop = x->end = temphigh * (x->bframes - 1); // !! ...
+                // only if (argc == 1) ?? !! <<-- raja had it this way ??
                 karma_window(x, x->extlwin);
                 karma_start(x, x->xstart);
-            } else if (argc == 2) {
-                x->start = 0.0;
-                x->loop = x->end = atom_getfloat(argv+1) * x->bframes - 1;
-            } else {
-                x->start = atom_getfloat(argv+1) * x->bframes - 1;
-                x->loop = x->end = atom_getfloat(argv+2) * x->bframes - 1;
+                
             }
+
         }
-    } else {
-        object_error((t_object *)x, "requires an associated buffer~ declaration");
+
     }
+
 }
 
-void karma_listclock(t_karma *x)
+void karma_clock_list(t_karma *x)
 {
-//    t_atom datalist[7];
-
     if (x->rprtime != 0)    // ('rprtime 0' == off, else milliseconds)
     {
         t_ptr_int frames = x->bframes - 1;
@@ -725,16 +938,16 @@ void karma_listclock(t_karma *x)
         double xtlwin = x->extlwin;
         
         t_atom datalist[7];
-        atom_setfloat(  datalist + 0,   CLAMP((diro < 0) ? ((pos - (frames - loop)) / loop) : (pos / loop), 0., 1.) );  // position float
-        atom_setlong(   datalist + 1,   go  );                                                                          // play flag
-        atom_setlong(   datalist + 2,   rec );                                                                          // record flag
-        atom_setfloat(  datalist + 3, ((diro < 0) ? ((frames - loop) / bmsr) : 0.0)     );                              // start float
-        atom_setfloat(  datalist + 4, ((diro < 0) ? (frames / bmsr) : (loop / bmsr))    );                              // end float
-        atom_setfloat(  datalist + 5, ((xtlwin * loop) / bmsr)  );                                                      // window float
-        atom_setlong(   datalist + 6,   statehuman  );                                                                  // state flag
+        atom_setfloat(  datalist + 0,   CLAMP((diro < 0) ? ((pos - (frames - loop)) / loop) : (pos / loop), 0., 1.) );  // position float % 0..1
+        atom_setlong(   datalist + 1,   go  );                                                                          // play flag int
+        atom_setlong(   datalist + 2,   rec );                                                                          // record flag int
+        atom_setfloat(  datalist + 3, ((diro < 0) ? ((frames - loop) / bmsr) : 0.0)     );                              // start float ms
+        atom_setfloat(  datalist + 4, ((diro < 0) ? (frames / bmsr) : (loop / bmsr))    );                              // end float ms
+        atom_setfloat(  datalist + 5, ((xtlwin * loop) / bmsr)  );                                                      // window float ms
+        atom_setlong(   datalist + 6,   statehuman  );                                                                  // state flag int
         
-//        outlet_list(x->messout, 0L, 7, datalist);   // !!
-        outlet_list(x->messout, gensym("list"), 7, datalist);   // !! &datalist ?!  why is this wrong ??
+//      outlet_list(x->messout, 0L, 7, &datalist);
+        outlet_list(x->messout, gensym("list"), 7, datalist);   // !! &datalist ??
 
         if (sys_getdspstate() && (x->rprtime > 0)) {
             clock_delay(x->tclock, x->rprtime);
@@ -826,13 +1039,13 @@ void karma_start(t_karma *x, double strt)   // strt = "position" float message
     }
 }
 
-// !! pete: i do not like the name "window" - surely it should be "selection" ??
+// !! pete: i do not like the name "window" - surely it should be "selection" or "loop" ??
 void karma_window(t_karma *x, double dur)   // dur = "window" float message
 {
     t_ptr_int loop = x->loop;
     
     if (!x->looprec) {
-        x->extlwin = (dur < 0.001) ? 0.001 : dur;
+        x->extlwin = (dur < 0.001) ? 0.001 : dur;   // !! fix - this minimum should be in meaningful values, not % 0..1 phase !!
         if (x->diro < 0) {
             x->end = x->start + (x->extlwin * loop);
             if (x->end > (x->bframes - 1)) {
@@ -851,7 +1064,7 @@ void karma_window(t_karma *x, double dur)   // dur = "window" float message
             }
         }
     } else {
-        x->extlwin = (dur < 0.001) ? 0.001 : dur;
+        x->extlwin = (dur < 0.001) ? 0.001 : dur;   // !! fix - this minimum should be in meaningful values, not % 0..1 phase !!
     }
 }
 
@@ -899,14 +1112,14 @@ void karma_record(t_karma *x)
     ap = x->append;
     fr = x->first;
     sc = x->statecontrol;
-    sh = x->statehuman;
+    sh = x->statehuman;     // !! fix: overdub display !! *
 
     x->stopallowed = 1;
 
     if (r) {
         if (rt) {
             sc = 2;
-            sh = 3;
+            sh = 3; // ?? *
         } else {
             sc = 3;
             sh = 2;
@@ -916,7 +1129,7 @@ void karma_record(t_karma *x)
             if (g) {
                 if (rt) {
                     sc = 2;
-                    sh = 3;
+                    sh = 3; // ?? *
                 } else {
                     sc = 10;
                     sh = 4;
@@ -979,7 +1192,7 @@ void karma_append(t_karma *x)
             x->append = 1;
             x->loop = x->bframes - 1;
             x->statecontrol = 9;
-            x->statehuman = 4;
+            x->statehuman = 4;  // ??
             x->stopallowed = 1;
         } else {
             object_error((t_object *)x, "can't append if already appending, or during creating 'initial-loop', or if buffer~ is completely filled");
@@ -993,22 +1206,34 @@ void karma_overdub(t_karma *x, double o)
 {
     x->ovdb = CLAMP(o, 0.0, 1.0);               // clamp overzealous ??
 }
-
+/*
 void karma_jump(t_karma *x, double j)
 {
     if (x->firstd) {
-        if((x->looprec) && (!x->rec)) {         // if(!((x->looprec) && (!x->rec))) ...
+        if ((x->looprec) && (!x->rec)) {        // if (!((x->looprec) && (!x->rec))) ...
                                                 // ... ?? ...
         } else {
             x->statecontrol = 8;
             x->jump = j;
-            x->statehuman = 1;                  // ?? ...
+//          x->statehuman = 1;                  // NO ?? ...
+            x->stopallowed = 1;
+        }
+    }
+}
+*/
+void karma_jump(t_karma *x, double j)
+{
+    if (x->firstd) {
+        if (!((x->looprec) && (!x->rec))) {
+            x->statecontrol = 8;
+            x->jump = j;
+//          x->statehuman = 1;                  // NO ?? ...
             x->stopallowed = 1;
         }
     }
 }
 
-t_max_err karmabuf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat)
+t_max_err karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat)
 {
     if (msg == ps_buffer_modified)
         x->buf_mod = 1;
@@ -1018,12 +1243,13 @@ t_max_err karmabuf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, vo
 
 void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long vecount, long flags)
 {
-    x->sr = srate;
-    x->clockgo = 1;
+    x->sr       = srate;
+    x->vs       = vecount;
+    x->clockgo  = 1;
     
     if (x->bufname != 0) {
         if (!x->firstd)
-            karma_setup(x, x->bufname);
+            karma_buf_setup(x, x->bufname);
         if (x->chans > 1) {
             if (x->chans > 2) {
                 object_method(dsp64, gensym("dsp_add64"), x, karma_quad_perform, 0, NULL);
@@ -1086,7 +1312,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     if (rec || recpre)
         dirt        = 1;
     if (x->buf_mod) {
-        karma_modset(x, buf);
+        karma_buf_modset(x, buf);
         x->buf_mod  = 0;
     }
     
@@ -1100,7 +1326,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     rupdwn          = x->rupdwn;
     rpre            = x->rpos;
     rectoo          = x->rectoo;
-    nchan           = x->bchans;    //
+    nchan           = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
     trig            = x->trig;
@@ -1217,7 +1443,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 rpre = -1;
             }
             fad = 0.0;
-        };              // !! !!
+        }   // !! !!
         
         if ((rec - recpre) < 0) {           // samp @rec-off
             if (ramp)
@@ -2116,7 +2342,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     if (rec || recpre)
         dirt        = 1;
     if (x->buf_mod) {
-        karma_modset(x, buf);
+        karma_buf_modset(x, buf);
         x->buf_mod  = 0;
     }
     
@@ -2133,7 +2359,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     rupdwn          = x->rupdwn;
     rpre            = x->rpos;
     rectoo          = x->rectoo;
-    nchan           = x->bchans;    //
+    nchan           = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
     trig            = x->trig;
@@ -2254,7 +2480,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                     rpre = -1;
                 }
                 fad = 0.0;
-            };              // !! !!
+            }   // !! !!
             
             if ((rec - recpre) < 0) {           // samp @rec-off
                 if (ramp)
@@ -3149,7 +3375,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                     rpre = -1;
                 }
                 fad = 0.0;
-            };              // !! !!
+            }   // !! !!
             
             if ((rec - recpre) < 0) {           // samp @rec-off
                 if (ramp)
@@ -4061,7 +4287,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     if (rec || recpre)
         dirt        = 1;
     if (x->buf_mod) {
-        karma_modset(x, buf);
+        karma_buf_modset(x, buf);
         x->buf_mod  = 0;
     }
 
@@ -4084,7 +4310,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     rupdwn          = x->rupdwn;
     rpre            = x->rpos;
     rectoo          = x->rectoo;
-    nchan           = x->bchans;    //
+    nchan           = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
     trig            = x->trig;
@@ -4207,7 +4433,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                     rpre = -1;
                 }
                 fad = 0.0;
-            };              // !! !!
+            }   // !! !!
             
             if ((rec - recpre) < 0) {           // samp @rec-off
                 if (ramp)
@@ -5242,7 +5468,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                     rpre = -1;
                 }
                 fad = 0.0;
-            };              // !! !!
+            }   // !! !!
             
             if ((rec - recpre) < 0) {           // samp @rec-off
                 if (ramp)
@@ -6211,7 +6437,7 @@ apden:
                     rpre = -1;
                 }
                 fad = 0.0;
-            };              // !! !!
+            }   // !! !!
             
             if ((rec - recpre) < 0) {           // samp @rec-off
                 if (ramp)
@@ -7116,7 +7342,7 @@ apdne:
                     rpre = -1;
                 }
                 fad = 0.0;
-            };              // !! !!
+            }   // !! !!
             
             if ((rec - recpre) < 0) {           // samp @rec-off
                 if (ramp)
