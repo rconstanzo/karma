@@ -116,7 +116,7 @@ typedef struct _karma {
     double  startpos;       // start position where to start playing set by the 'position $1' message sent to object (phase 0..1)
     double  snrfade;        // fade counter for 'Switch and Ramp' <<-- normalised 0..1 ?? !!
     double  overdubamp;     // overdub amplitude 0..1 set by 'overdub $1' message sent to object
-    double  overdubprev;    // a 'current' overdub amount(for smoothing overdub amp changes)
+    double  overdubprev;    // a 'current' overdub amount (for smoothing overdub amp changes)
 
     long    vs;             // system vectorsize
     long    syncoutlet;     // make sync outlet ? (object arg #3: 0/1 flag) <<-- TODO: switch to private @ttribute instead
@@ -449,8 +449,9 @@ void ext_main(void *r)
     class_addmethod(c, (method)karma_append,    "append",               0);
     // @method setloop @digest set <o>karma~</o> loop points (not 'window')
     // @description points (start/end) for setting <o>karma~</o> loop (not 'window') <br />
-    // @marg 0 @name loop_start @optional 0 @type float
-    // @marg 1 @name loop_end @optional 1 @type float
+    // @marg 0 @name loop_start_point @optional 1 @type float
+    // @marg 1 @name loop_end_point @optional 1 @type float
+    // @marg 2 @name points_type @optional 1 @type symbol
     class_addmethod(c, (method)karma_setloop,   "setloop",  A_GIMME,    0);
     // @method set @digest set (new) buffer
     // @description set (new) buffer for recording or playback, can switch buffers in realtime <br />
@@ -1170,9 +1171,9 @@ void karma_clock_list(t_karma *x)
         atom_setfloat(  datalist + 0,   CLAMP((directionorig < 0) ? ((playhead - (frames - maxloop)) / maxloop) : (playhead / maxloop), 0., 1.) );  // position float % 0..1
         atom_setlong(   datalist + 1,   go  );                                                                          // play flag int
         atom_setlong(   datalist + 2,   rec );                                                                          // record flag int
-        atom_setfloat(  datalist + 3, ((directionorig < 0) ? ((frames - maxloop) / bmsr) : 0.0)     );                              // start float ms
-        atom_setfloat(  datalist + 4, ((directionorig < 0) ? (frames / bmsr) : (maxloop / bmsr))    );                              // end float ms
-        atom_setfloat(  datalist + 5, ((xtlwin * maxloop) / bmsr)  );                                                      // window float ms
+        atom_setfloat(  datalist + 3, ((directionorig < 0) ? ((frames - maxloop) / bmsr) : 0.0)     );                  // start float ms
+        atom_setfloat(  datalist + 4, ((directionorig < 0) ? (frames / bmsr) : (maxloop / bmsr))    );                  // end float ms
+        atom_setfloat(  datalist + 5, ((xtlwin * maxloop) / bmsr)  );                                                   // window float ms
         atom_setlong(   datalist + 6,   statehuman  );                                                                  // state flag int
         
 //      outlet_list(x->messout, 0L, 7, &datalist);
@@ -1551,40 +1552,40 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
 
     go              = x->go;
     statecontrol    = x->statecontrol;
-    playfadeflag          = x->playfadeflag;
-    recfadeflag          = x->recfadeflag;
+    playfadeflag    = x->playfadeflag;
+    recfadeflag     = x->recfadeflag;
     rpre            = x->recordhead;
     rectoo          = x->rectoo;
     nchan           = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
-    triginit            = x->triginit;
-    jumpflag           = x->jumpflag;
+    triginit        = x->triginit;
+    jumpflag        = x->jumpflag;
     append          = x->append;
-    directionorig            = x->directionorig;
-    directionprev            = x->directionprev;
-    maxloop            = x->maxloop;
+    directionorig   = x->directionorig;
+    directionprev   = x->directionprev;
+    maxloop         = x->maxloop;
     xwin            = x->selection;
     looprec         = x->looprec;
-    startsel           = x->startsel;
-    startpos          = x->startpos;
-    endsel             = x->endsel;
-    recendmark           = x->recendmark;
-    overdubamp            = x->overdubprev;
-    overdubprev             = x->overdubamp;
+    startsel        = x->startsel;
+    startpos        = x->startpos;
+    endsel          = x->endsel;
+    recendmark      = x->recendmark;
+    overdubamp      = x->overdubprev;
+    overdubprev     = x->overdubamp;
     ovdbdif         = (overdubamp != overdubprev) ? ((overdubprev - overdubamp) / n) : 0.0;
-    recordfade            = x->recordfade;
-    playfade            = x->playfade;
+    recordfade      = x->recordfade;
+    playfade        = x->playfade;
     dpos            = x->playhead;
-    playhead             = trunc(dpos);
-    maxhead          = x->maxhead;
-    wrapflag            = x->wrapflag;
-    jumphead            = x->jumphead;
-    pokesteps           = x->pokesteps;
-    snrfade             = x->snrfade;
-    globalramp            = (double)x->globalramp;
-    snrramp          = (double)x->snrramp;
-    snrtype            = x->snrtype;
+    playhead        = trunc(dpos);
+    maxhead         = x->maxhead;
+    wrapflag        = x->wrapflag;
+    jumphead        = x->jumphead;
+    pokesteps       = x->pokesteps;
+    snrfade         = x->snrfade;
+    globalramp      = (double)x->globalramp;
+    snrramp         = (double)x->snrramp;
+    snrtype         = x->snrtype;
     interp          = x->interpflag;
     
     switch (statecontrol)   // all-in-one 'switch' statement to catch and handle all(most) messages - raja
@@ -2494,36 +2495,36 @@ apned:
         x->clockgo  = 1;
     }
 
-    x->o1prev       = o1prev;
-    x->o1dif        = o1dif;
-    x->writeval1    = writeval1;
+    x->o1prev           = o1prev;
+    x->o1dif            = o1dif;
+    x->writeval1        = writeval1;
 
-    x->maxhead       = maxhead;
+    x->maxhead          = maxhead;
     x->pokesteps        = pokesteps;
     x->wrapflag         = wrapflag;
     x->snrfade          = snrfade;
-    x->playhead          = dpos;
-    x->directionorig         = directionorig;
-    x->directionprev         = directionprev;
-    x->recordhead         = rpre;
-    x->rectoo       = rectoo;
-    x->recordfade         = recordfade;
+    x->playhead         = dpos;
+    x->directionorig    = directionorig;
+    x->directionprev    = directionprev;
+    x->recordhead       = rpre;
+    x->rectoo           = rectoo;
+    x->recordfade       = recordfade;
     x->triginit         = triginit;
-    x->jumpflag        = jumpflag;
-    x->go           = go;
-    x->rec          = rec;
-    x->recpre       = recpre;
-    x->statecontrol = statecontrol;
-    x->playfadeflag       = playfadeflag;
-    x->recfadeflag       = recfadeflag;
+    x->jumpflag         = jumpflag;
+    x->go               = go;
+    x->rec              = rec;
+    x->recpre           = recpre;
+    x->statecontrol     = statecontrol;
+    x->playfadeflag     = playfadeflag;
+    x->recfadeflag      = recfadeflag;
     x->playfade         = playfade;
-    x->maxloop         = maxloop;
-    x->looprec      = looprec;
-    x->startsel        = startsel;
-    x->endsel          = endsel;
-    x->overdubprev          = overdubamp;
-    x->recendmark        = recendmark;
-    x->append       = append;
+    x->maxloop          = maxloop;
+    x->looprec          = looprec;
+    x->startsel         = startsel;
+    x->endsel           = endsel;
+    x->overdubprev      = overdubamp;
+    x->recendmark       = recendmark;
+    x->append           = append;
 
     return;
 
@@ -2584,40 +2585,40 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
 
     go              = x->go;
     statecontrol    = x->statecontrol;
-    playfadeflag          = x->playfadeflag;
-    recfadeflag          = x->recfadeflag;
+    playfadeflag    = x->playfadeflag;
+    recfadeflag     = x->recfadeflag;
     rpre            = x->recordhead;
     rectoo          = x->rectoo;
     nchan           = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
-    triginit            = x->triginit;
-    jumpflag           = x->jumpflag;
+    triginit        = x->triginit;
+    jumpflag        = x->jumpflag;
     append          = x->append;
-    directionorig            = x->directionorig;
-    directionprev            = x->directionprev;
-    maxloop            = x->maxloop;
+    directionorig   = x->directionorig;
+    directionprev   = x->directionprev;
+    maxloop         = x->maxloop;
     xwin            = x->selection;
     looprec         = x->looprec;
-    startsel           = x->startsel;
-    startpos          = x->startpos;
-    endsel             = x->endsel;
-    recendmark           = x->recendmark;
-    overdubamp            = x->overdubprev;
-    overdubprev             = x->overdubamp;
+    startsel        = x->startsel;
+    startpos        = x->startpos;
+    endsel          = x->endsel;
+    recendmark      = x->recendmark;
+    overdubamp      = x->overdubprev;
+    overdubprev     = x->overdubamp;
     ovdbdif         = (overdubamp != overdubprev) ? ((overdubprev - overdubamp) / n) : 0.0;
-    recordfade            = x->recordfade;
-    playfade            = x->playfade;
+    recordfade      = x->recordfade;
+    playfade        = x->playfade;
     dpos            = x->playhead;
-    playhead             = trunc(dpos);
-    maxhead          = x->maxhead;
-    wrapflag            = x->wrapflag;
-    jumphead            = x->jumphead;
-    pokesteps           = x->pokesteps;
-    snrfade             = x->snrfade;
-    globalramp            = (double)x->globalramp;
-    snrramp          = (double)x->snrramp;
-    snrtype            = x->snrtype;
+    playhead        = trunc(dpos);
+    maxhead         = x->maxhead;
+    wrapflag        = x->wrapflag;
+    jumphead        = x->jumphead;
+    pokesteps       = x->pokesteps;
+    snrfade         = x->snrfade;
+    globalramp      = (double)x->globalramp;
+    snrramp         = (double)x->snrramp;
+    snrtype         = x->snrtype;
     interp          = x->interpflag;
     
     switch (statecontrol)   // all-in-one 'switch' statement to catch and handle all(most) messages - raja
@@ -4430,39 +4431,39 @@ apnde:
         x->clockgo  = 1;
     }
 
-    x->o1prev       = o1prev;
-    x->o2prev       = o2prev;
-    x->o1dif        = o1dif;
-    x->o2dif        = o2dif;
-    x->writeval1    = writeval1;
-    x->writeval2    = writeval2;
+    x->o1prev           = o1prev;
+    x->o2prev           = o2prev;
+    x->o1dif            = o1dif;
+    x->o2dif            = o2dif;
+    x->writeval1        = writeval1;
+    x->writeval2        = writeval2;
     
-    x->maxhead       = maxhead;
+    x->maxhead          = maxhead;
     x->pokesteps        = pokesteps;
     x->wrapflag         = wrapflag;
     x->snrfade          = snrfade;
-    x->playhead          = dpos;
-    x->directionorig         = directionorig;
-    x->directionprev         = directionprev;
-    x->recordhead         = rpre;
-    x->rectoo       = rectoo;
-    x->recordfade         = recordfade;
+    x->playhead         = dpos;
+    x->directionorig    = directionorig;
+    x->directionprev    = directionprev;
+    x->recordhead       = rpre;
+    x->rectoo           = rectoo;
+    x->recordfade       = recordfade;
     x->triginit         = triginit;
-    x->jumpflag        = jumpflag;
-    x->go           = go;
-    x->rec          = rec;
-    x->recpre       = recpre;
-    x->statecontrol = statecontrol;
-    x->playfadeflag       = playfadeflag;
-    x->recfadeflag       = recfadeflag;
+    x->jumpflag         = jumpflag;
+    x->go               = go;
+    x->rec              = rec;
+    x->recpre           = recpre;
+    x->statecontrol     = statecontrol;
+    x->playfadeflag     = playfadeflag;
+    x->recfadeflag      = recfadeflag;
     x->playfade         = playfade;
-    x->maxloop         = maxloop;
-    x->looprec      = looprec;
-    x->startsel        = startsel;
-    x->endsel          = endsel;
-    x->overdubprev          = overdubamp;
-    x->recendmark        = recendmark;
-    x->append       = append;
+    x->maxloop          = maxloop;
+    x->looprec          = looprec;
+    x->startsel         = startsel;
+    x->endsel           = endsel;
+    x->overdubprev      = overdubamp;
+    x->recendmark       = recendmark;
+    x->append           = append;
     
     return;
 
@@ -4535,40 +4536,40 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
 
     go              = x->go;
     statecontrol    = x->statecontrol;
-    playfadeflag          = x->playfadeflag;
-    recfadeflag          = x->recfadeflag;
+    playfadeflag    = x->playfadeflag;
+    recfadeflag     = x->recfadeflag;
     rpre            = x->recordhead;
     rectoo          = x->rectoo;
     nchan           = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
-    triginit            = x->triginit;
-    jumpflag           = x->jumpflag;
+    triginit        = x->triginit;
+    jumpflag        = x->jumpflag;
     append          = x->append;
-    directionorig            = x->directionorig;
-    directionprev            = x->directionprev;
-    maxloop            = x->maxloop;
+    directionorig   = x->directionorig;
+    directionprev   = x->directionprev;
+    maxloop         = x->maxloop;
     xwin            = x->selection;
     looprec         = x->looprec;
-    startsel           = x->startsel;
-    startpos          = x->startpos;
-    endsel             = x->endsel;
-    recendmark           = x->recendmark;
-    overdubamp            = x->overdubprev;
-    overdubprev             = x->overdubamp;
+    startsel        = x->startsel;
+    startpos        = x->startpos;
+    endsel          = x->endsel;
+    recendmark      = x->recendmark;
+    overdubamp      = x->overdubprev;
+    overdubprev     = x->overdubamp;
     ovdbdif         = (overdubamp != overdubprev) ? ((overdubprev - overdubamp) / n) : 0.0;
-    recordfade            = x->recordfade;
-    playfade            = x->playfade;
+    recordfade      = x->recordfade;
+    playfade        = x->playfade;
     dpos            = x->playhead;
-    playhead             = trunc(dpos);
-    maxhead          = x->maxhead;
-    wrapflag            = x->wrapflag;
-    jumphead            = x->jumphead;
-    pokesteps           = x->pokesteps;
-    snrfade             = x->snrfade;
-    globalramp            = (double)x->globalramp;
-    snrramp          = (double)x->snrramp;
-    snrtype            = x->snrtype;
+    playhead        = trunc(dpos);
+    maxhead         = x->maxhead;
+    wrapflag        = x->wrapflag;
+    jumphead        = x->jumphead;
+    pokesteps       = x->pokesteps;
+    snrfade         = x->snrfade;
+    globalramp      = (double)x->globalramp;
+    snrramp         = (double)x->snrramp;
+    snrtype         = x->snrtype;
     interp          = x->interpflag;
     
     switch (statecontrol)   // all-in-one 'switch' statement to catch and handle all(most) messages - raja
@@ -8407,45 +8408,45 @@ apnde:
         x->clockgo  = 1;
     }
 
-    x->o1prev       = o1prev;
-    x->o2prev       = o2prev;
-    x->o3prev       = o3prev;
-    x->o4prev       = o4prev;
-    x->o1dif        = o1dif;
-    x->o2dif        = o2dif;
-    x->o3dif        = o3dif;
-    x->o4dif        = o4dif;
-    x->writeval1    = writeval1;
-    x->writeval2    = writeval2;
-    x->writeval3    = writeval3;
-    x->writeval4    = writeval4;
+    x->o1prev           = o1prev;
+    x->o2prev           = o2prev;
+    x->o3prev           = o3prev;
+    x->o4prev           = o4prev;
+    x->o1dif            = o1dif;
+    x->o2dif            = o2dif;
+    x->o3dif            = o3dif;
+    x->o4dif            = o4dif;
+    x->writeval1        = writeval1;
+    x->writeval2        = writeval2;
+    x->writeval3        = writeval3;
+    x->writeval4        = writeval4;
     
-    x->maxhead       = maxhead;
+    x->maxhead          = maxhead;
     x->pokesteps        = pokesteps;
     x->wrapflag         = wrapflag;
     x->snrfade          = snrfade;
-    x->playhead          = dpos;
-    x->directionorig         = directionorig;
-    x->directionprev         = directionprev;
-    x->recordhead         = rpre;
-    x->rectoo       = rectoo;
-    x->recordfade         = recordfade;
+    x->playhead         = dpos;
+    x->directionorig    = directionorig;
+    x->directionprev    = directionprev;
+    x->recordhead       = rpre;
+    x->rectoo           = rectoo;
+    x->recordfade       = recordfade;
     x->triginit         = triginit;
-    x->jumpflag        = jumpflag;
-    x->go           = go;
-    x->rec          = rec;
-    x->recpre       = recpre;
-    x->statecontrol = statecontrol;
-    x->playfadeflag       = playfadeflag;
-    x->recfadeflag       = recfadeflag;
+    x->jumpflag         = jumpflag;
+    x->go               = go;
+    x->rec              = rec;
+    x->recpre           = recpre;
+    x->statecontrol     = statecontrol;
+    x->playfadeflag     = playfadeflag;
+    x->recfadeflag      = recfadeflag;
     x->playfade         = playfade;
-    x->maxloop         = maxloop;
-    x->looprec      = looprec;
-    x->startsel        = startsel;
-    x->endsel          = endsel;
-    x->overdubprev          = overdubamp;
-    x->recendmark        = recendmark;
-    x->append       = append;
+    x->maxloop          = maxloop;
+    x->looprec          = looprec;
+    x->startsel         = startsel;
+    x->endsel           = endsel;
+    x->overdubprev      = overdubamp;
+    x->recendmark       = recendmark;
+    x->append           = append;
     
     return;
     
