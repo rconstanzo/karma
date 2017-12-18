@@ -88,7 +88,9 @@ typedef struct _karma {
     
     t_pxobject       ob;
     t_buffer_ref    *buf;
+    t_buffer_ref    *buf_temp;
     t_symbol        *bufname;
+    t_symbol        *bufname_temp;
 
     double  sr;             // system samplerate
     double  bsr;            // buffer samplerate
@@ -97,7 +99,6 @@ typedef struct _karma {
     double  vs;             // system vectorsize
     double  vsnorm;         // normalised system vectorsize
 
-//  double  prev;           // ?? !! not used ?? !!
     double  o1prev;         // previous sample value of "osamp1" etc...
     double  o2prev;         // ...
     double  o3prev;
@@ -189,13 +190,14 @@ void        karma_buf_dblclick(t_karma *x);
 
 void        karma_overdub(t_karma *x, double amplitude);
 void        karma_window(t_karma *x, double duration);
-void        karma_setloop(t_karma *x, t_symbol *s, short argc, t_atom *argv);
+void        karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv);
+void        karma_setloop(t_karma *x, t_symbol *s, short ac, t_atom *av);
 
 void        karma_buf_setup(t_karma *x, t_symbol *s);
 void        karma_buf_modset(t_karma *x, t_buffer_obj *b);
 void        karma_clock_list(t_karma *x);
-void        karma_buf_change(t_karma *x, t_symbol *s, short argc, t_atom *argv);
-
+void        karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv);
+void        karma_buf_change(t_karma *x, t_symbol *s, short ac, t_atom *av);
 void        karma_jump(t_karma *x, double j);
 void        karma_append(t_karma *x);
 
@@ -574,13 +576,13 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
         x->directionprev = x->directionorig = x->recordprev = x->record = x->recordalt = x->recendmark = x->go = x->triginit = 0;
         x->pokesteps = x->writeval1 = x->writeval2 = x->writeval3 = x->writeval4 = x->wrapflag = x->looprecord = 0;
         x->maxhead = x->playhead = 0.0;
-        x->startpos = x->jumphead = x->snrfade = x->o1dif = x->o2dif = x->o3dif = x->o4dif = x->o1prev = x->o2prev = x->o3prev = x->o4prev = 0.0;// = x->prev ?? !!
+        x->startpos = x->jumphead = x->snrfade = x->o1dif = x->o2dif = x->o3dif = x->o4dif = x->o1prev = x->o2prev = x->o3prev = x->o4prev = 0.0;
         
         if (bufname != 0)
             x->bufname = bufname;
-        else
+/*      else
             object_error((t_object *)x, "requires an associated buffer~ declaration");
-        
+*/
         x->syncoutlet = syncoutlet;
         // @arg 2 @name sync_outlet @optional 1 @type int @digest Create audio rate sync position outlet ?
         // @description Default = <b>0 (off)</b> <br />
@@ -629,6 +631,7 @@ void karma_free(t_karma *x)
     if (x->initskip) {
         dsp_free((t_pxobject *)x);
         object_free(x->buf);
+        object_free(x->buf_temp);
         object_free(x->tclock);
         object_free(x->messout);
     }
@@ -696,256 +699,284 @@ void karma_buf_modset(t_karma *x, t_buffer_obj *b)
     }
 }
 
+// karma_buf_change method defered  // " set ..... "
 // pete says: i know this branching is horrible, will rewrite soon...
-void karma_buf_change(t_karma *x, t_symbol *s, short argc, t_atom *argv) // " set ..... "
+void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)
 {
     t_buffer_obj *buf;
+    t_buffer_obj *buf_temp;
     t_symbol *b;
+    t_symbol *b_temp;
     t_symbol *loop_points_sym;
-    long loop_points_flag = 2;                          // specify start/end loop points: 0 = in phase, 1 = in samples, 2 = in milliseconds (default)
-    double bframesm1, bframesms, bvsnorm, bvsnorm05;    // bframesm1 not needed ?, bframesms is bollox ?
-    double templow, templowtemp, temphigh;
-    templow = templowtemp = -1.0;
-    temphigh = -1.0;
+    long loop_points_flag;                          // specify start/end loop points: 0 = in phase, 1 = in samples, 2 = in milliseconds (default)
+    double bframesm1, bframesms, bvsnorm, bvsnorm05;// bframesm1 not needed ?, bframesms is bollox ?
+    double templow, templowtemp, temphigh, temphightemp;
 
-    // error checking etc first .....
+    // error checking first .....
 
-    if (argc <= 0)
+    b_temp  = atom_getsym(argv + 0);    // already arg checked to be A_SYM
+    
+    if (b_temp == ps_nothing)
     {
-        object_error((t_object *) x, "%s message must be followed by argument(s) (it does nothing alone)", s->s_name);
+        object_error((t_object *)x, "%s requires a valid buffer~ declaration (none found)", s->s_name);
         return;
 
     } else {
-
-        if (atom_gettype(argv + 0) == A_SYM) {
-            
-            b = atom_getsym(argv + 0);
-            
-        } else {
-            
-            object_error((t_object *)x, "first argument to %s message must be a symbol (associated buffer~ name)", s->s_name);
-            return;
-            
-        }
+        // !! this "buf_temp" assignment is to check for a valid buffer, so that karma~ playback...
+        // ...continues with main assigned "buf" even if symbol given is in error !!
+        // this is slow (& expensive ??) - there must be a better way ??
         
-        if (b == ps_nothing)
-        {
-            object_error((t_object *)x, "%s requires a valid buffer~ declaration (none found)", s->s_name);
+        x->bufname_temp = b_temp;
+        
+        if (!x->buf_temp)
+            x->buf_temp = buffer_ref_new((t_object *)x, b_temp);
+        else
+            buffer_ref_set(x->buf_temp, b_temp);    // this should never get called ??
+        
+        buf_temp = buffer_ref_getobject(x->buf_temp);
+        
+        if (buf_temp == NULL) {
+            
+            object_warn((t_object *)x, "cannot find any buffer~ named %s, ignoring", b_temp->s_name);
+            x->buf_temp = 0;            // should dspfree the temp buffer here ??
             return;
 
-//  //  //  !! these next few lines are wrong! as buffer accepted then queried so
-//  //  //  this is why error of no buffer~ found causes playback to stop! must fix !!
-            
         } else {
-            // !! if just "set [buffername]" with no additional args and [buffername] already set, message will reset loop points to min/max
+            // !! if just "set [buffername]" with no additional args and [buffername]...
+            // ...already set, message will reset loop points to min / max !!
+            x->buf_temp = 0;            // should dspfree the temp buffer here ??
+            
+            b  = atom_getsym(argv + 0); // already arg checked
 
             x->bufname = b;
             
-            if (!x->buf)
+            if (!x->buf) {
                 x->buf = buffer_ref_new((t_object *)x, b);
-            else
+                x->directionorig = 0;
+                x->recordhead = -1;
+            } else {
                 buffer_ref_set(x->buf, b);
+                x->recordhead = -1;
+            }
             
             buf = buffer_ref_getobject(x->buf);
-            
-            if (buf == NULL) {
-                
-                x->buf = 0;                 // !!
-                object_warn((t_object *)x, "cannot find any buffer~ named %s, ignoring", b->s_name);  // object_error ??
-                return;                     // !!
 
-            } else {                        // should this be called via defered thread ??
+            loop_points_sym = gensym("ms");//NULL;
+            loop_points_flag = 2;
+            templow = templowtemp = -1.0;
+            temphigh = -1.0;
 
-    // do it .....
-/*
-                if (x->stopallowed == 0) {  // these should only be (re)set here if karma~ NOT currently playing ??
-                    x->directionorig = 0;
-                    x->maxhead = x->playhead = 0.0;
-                    x->recordhead = -1;
-                }
-*/
+    // ..... do it .....
+
+            if (x->stopallowed == 0) {      // these should only be (re)set here if karma~ not currently playing ??
                 x->directionorig = 0;
-                x->maxhead = x->playhead;// = 0.0; // !! no, we want a 'takeover' mode...
-                x->recordhead = -1;
-                
-                x->bchans   = buffer_getchannelcount(buf);
-                x->bframes  = buffer_getframecount(buf);
-                x->bmsr     = buffer_getmillisamplerate(buf);
-                x->bsr      = buffer_getsamplerate(buf);
-                x->srscale  = x->bsr / x->sr;
+                x->maxhead = x->playhead = 0.0;
+            } else {
+                x->maxhead = x->playhead;   // !! we want a 'takeover' mode...
+            }
 
-                bframesm1   = ((double)x->bframes - 1);
-                bframesms   = bframesm1 / x->bmsr * x->srscale;             // buffersize in milliseconds
-                bvsnorm     = x->vsnorm * (x->bsr / bframesm1);             // vectorsize in (double) % 0..1 phase units of buffer~
-                bvsnorm05   = bvsnorm * 0.5;                                // half vectorsize (normalised)
+            x->bchans   = buffer_getchannelcount(buf);
+            x->bframes  = buffer_getframecount(buf);
+            x->bmsr     = buffer_getmillisamplerate(buf);
+            x->bsr      = buffer_getsamplerate(buf);
+            x->srscale  = x->bsr / x->sr;
 
-                // maximum length message (6 atoms after 'set') = " set ...
-                // ... 0::symbol::buffername [1::float::loop start] [2::float::loop end] [3::symbol::loop points type] ...
-                // ... [4::symbol::offset 5::int::channel # offset] "   // <<-- not implemented "offset n" yet
+            bframesm1   = ((double)x->bframes - 1);
+            bframesms   = bframesm1 / x->bmsr * x->srscale;             // buffersize in milliseconds
+            bvsnorm     = x->vsnorm * (x->bsr / bframesm1);             // vectorsize in (double) % 0..1 phase units of buffer~
+            bvsnorm05   = bvsnorm * 0.5;                                // half vectorsize (normalised)
+
+            // maximum length message (4[6] atoms after 'set') = " set ...
+            // ... 0::symbol::buffername [1::float::loop start] [2::float::loop end] [3::symbol::loop points type] ...
+            // ... [4::symbol::offset 5::int::channel # offset] "   // <<-- not implemented "offset n" yet
+            
+            if (argc >= 4) {    // will be '(argc >= 6)' ... etc ...
                 
-                if (argc >= 4) {    // will be '(argc >= 6)' ... etc ...
-                    
-                    if (argc > 4)
-                        object_warn((t_object *) x, "too many arguments for %s message, truncating to first four args", s->s_name);
-                    
-                    if (atom_gettype(argv + 3) == A_SYM) {
-                        loop_points_sym = atom_getsym(argv + 3);
-                        if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )                     // phase 0..1
-                            loop_points_flag = 0;
-                        else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )                                   // samples
-                            loop_points_flag = 1;
-                        else                                    // ms
-                            loop_points_flag = 2;
-                            //loop_points_sym = gensym("ms");
-                    } else if (atom_gettype(argv + 3) == A_LONG) {  // can just be int
-                        loop_points_flag = atom_getlong(argv + 3);
-                    } else if (atom_gettype(argv + 3) == A_FLOAT) { // convert if error float
-                        loop_points_flag = (long)atom_getfloat(argv + 3);
-                    } else {
-                        object_warn((t_object *) x, "%s message does not understand arg no.4, using milliseconds for args 2 & 3", s->s_name);
+                if (atom_gettype(argv + 3) == A_SYM) {
+                    loop_points_sym = atom_getsym(argv + 3);
+                    if (loop_points_sym == gensym("dummy")) {
+                        // !! "dummy" is silent, move on...
                         loop_points_flag = 2;    // default ms
-                        //loop_points_sym = gensym("ms");
+                        loop_points_sym = gensym("ms");     // !!
+                    } else if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )                     // phase 0..1
+                        loop_points_flag = 0;
+                    else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )                                   // samples
+                        loop_points_flag = 1;
+                    else {      // if "ms" or anything      // ms
+                        loop_points_flag = 2;
+                        loop_points_sym = gensym("ms");     // !!
                     }
-
-                    loop_points_flag = CLAMP(loop_points_flag, 0, 2);
-
+                } else if (atom_gettype(argv + 3) == A_LONG) {  // can just be int 0..2
+                    loop_points_flag = atom_getlong(argv + 3);
+                } else if (atom_gettype(argv + 3) == A_FLOAT) { // convert if error float
+                    loop_points_flag = (long)atom_getfloat(argv + 3);
+                } else {
+                    object_warn((t_object *) x, "%s message does not understand arg no.4, using milliseconds for args 2 & 3", s->s_name);
+                    loop_points_flag = 2;    // default ms
+                    loop_points_sym = gensym("ms");     // !!
                 }
+
+                loop_points_flag = CLAMP(loop_points_flag, 0, 2);
+
+            }
+            
+            if (argc >= 3) {
                 
-                if (argc >= 3) {
-                    
-                    if (atom_gettype(argv + 2) == A_FLOAT) {
-                        temphigh = atom_getfloat(argv + 2);
-                        if (temphigh < 0.) {
-                            object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
-                            temphigh = 0.;
-                        }   // !! do maximum check later !!
-                    } else if (atom_gettype(argv + 2) == A_LONG) {
-                        temphigh = (double)atom_getlong(argv + 2);  // even if samples ??
-                        if (temphigh < 0.) {
-                            object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
-                            temphigh = 0.;
-                        }   // !! do maximum check later !!
-                    } else if ( (atom_gettype(argv + 2) == A_SYM) && (argc < 4) ) {
-                        temphigh = -1.;
-                        loop_points_sym = atom_getsym(argv + 2);
-                        if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )              // phase 0..1
-                                loop_points_flag = 0;
-                        else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )                            // samples
-                                loop_points_flag = 1;
-                        else if ( (loop_points_sym == gensym("milliseconds")) || (loop_points_sym == gensym("MS")) || (loop_points_sym == gensym("ms")) )               // ms
-                                loop_points_flag = 2;
-                        else
-                            object_warn((t_object *) x, "%s message does not understand arg no.3, setting to milliseconds & maximum", s->s_name);
-                            //loop_points_sym = gensym("ms");
-                    } else {
-                        temphigh = -1.;
-                        object_warn((t_object *) x, "%s message does not understand arg no.3, setting unit to maximum", s->s_name);
+                if (atom_gettype(argv + 2) == A_FLOAT) {
+                    temphigh = atom_getfloat(argv + 2);
+                    if (temphigh < 0.) {
+                        object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
+                        //temphigh = 0.;
+                    }   // !! do maximum check later !!
+                } else if (atom_gettype(argv + 2) == A_LONG) {
+                    temphigh = (double)atom_getlong(argv + 2);  // even if samples ??
+                    if (temphigh < 0.) {
+                        object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
+                        //temphigh = 0.;
+                    }   // !! do maximum check later !!
+                } else if ( (atom_gettype(argv + 2) == A_SYM) && (argc < 4) ) {
+                    //temphigh = -1.;
+                    loop_points_sym = atom_getsym(argv + 2);
+                    if (loop_points_sym == gensym("dummy")) {
+                        // !! "dummy" is silent, move on...
+                        loop_points_flag = 2;    // default ms
+                        loop_points_sym = gensym("ms");     // !!
+                    } else if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )              // phase 0..1
+                            loop_points_flag = 0;
+                    else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )                            // samples
+                            loop_points_flag = 1;
+                    else if ( (loop_points_sym == gensym("milliseconds")) || (loop_points_sym == gensym("MS")) || (loop_points_sym == gensym("ms")) )               // ms
+                            loop_points_flag = 2;
+                    else {
+                        object_warn((t_object *) x, "%s message does not understand arg no.3, setting to milliseconds", s->s_name);
+                        loop_points_flag = 2;
+                        loop_points_sym = gensym("ms");     // !!
                     }
+                } else {
+                    //temphigh = -1.;
+                    object_warn((t_object *) x, "%s message does not understand arg no.3, setting unit to maximum", s->s_name);
                 }
-                    
-                if (argc >= 2) {
-
-                    if (atom_gettype(argv + 1) == A_FLOAT) {
-                        if (temphigh <= 0.) {
-                            temphigh = atom_getfloat(argv + 1);
-                            templow = 0.;
-                        } else {
-                            templow = atom_getfloat(argv + 1);
-                            if (templow < 0.) {
-                                object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
-                                templow = 0.;
-                            }   // !! do maximum check later !!
-                        }
-                    } else if (atom_gettype(argv + 1) == A_LONG) {
-                        if (temphigh <= 0.) {
-                            temphigh = (double)atom_getlong(argv + 1);  // even if samples ??
-                            templow = 0.;
-                        } else {
-                            templow = (double)atom_getlong(argv + 1);   // even if samples ??
-                            if (templow < 0.) {
-                                object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
-                                templow = 0.;
-                            }   // !! do maximum check later !!
-                        }
-                    } else {
-                        //temphigh = -1.;     // !! no - leave temphigh alone in case only arg #2 is an error
-                        templow = -1.;
-                        object_warn((t_object *) x, "%s message does not understand arg no.2, setting loop points to minimum (and maximum)", s->s_name);
-                    }
-                    
-                }
-
-                // by this stage in routine, if tempLOW < 0., it has not been set and should be set to default (0.) regardless of 'loop_points_flag'
-                if (templow < 0.)
-                    templow = 0.;
-
-                if (loop_points_flag == 0) {            // if PHASE
-                    // by this stage in routine, if tempHIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
-                    if (temphigh < 0.)
-                        temphigh = 1.;                                      // already normalised 0..1
-                    
-                    // templow already treated as phase 0..1
-                } else if (loop_points_flag == 1) {     // if SAMPLES
-                    // by this stage in routine, if tempHIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
-                    if (temphigh < 0.)
-                        temphigh = 1.;                                      // already normalised 0..1
-                    else
-                        temphigh = temphigh / bframesm1;                    // normalise samples high 0..1..
-
-                    if (templow > 0.)
-                        templow = templow / bframesm1;                      // normalise samples low 0..1..
-                } else {                                // if MILLISECONDS (default)
-                    // by this stage in routine, if tempHIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
-                    if (temphigh < 0.)
-                        temphigh = 1.;                                      // already normalised 0..1
-                    else
-                        temphigh = temphigh / bframesms;                    // normalise milliseconds high 0..1..
-
-                    if (templow > 0.)
-                        templow = templow / bframesms;                      // normalise milliseconds low 0..1..
-                }
-
-                // !! normalised 0..1 from here on ... min/max & check & clamp once normalisation has occurred
-                templowtemp = templow;
-                templow     = MIN(templow, temphigh);           // templow, temphigh = sort_double(templow, temphigh);
-                temphigh    = MAX(templowtemp, temphigh);
-                if (templow > 1.) {                             // already sorted (minmax), so if this is the case we know we are fucked
-                    object_warn((t_object *) x, "loop minimum cannot be greater than available buffer~ size, setting to buffer~ size minus vectorsize");
-                    templow = 1. - bvsnorm;
-                }
-                if (temphigh > 1.) {
-                    object_warn((t_object *) x, "loop maximum cannot be greater than available buffer~ size, setting to buffer~ size");
-                    temphigh = 1.;
-                }
-                // finally check for minimum size ...
-                if ( (temphigh - templow) < bvsnorm ) {
-                    object_warn((t_object *) x, "loop size (loop maximum minus loop minimum) cannot be this small, minimum is vectorsize internally (currently using %.0f samples)", x->vs);
-                    if ( (templow - bvsnorm05) < 0. ) {
-                        templow = 0.;
-                        temphigh = bvsnorm;
-                    } else if ( (temphigh + bvsnorm05) > 1. ) {
-                        temphigh = 1.;
-                        templow = 1. - bvsnorm;
-                    } else {
-                        templow = templow - bvsnorm05;
-                        temphigh = temphigh + bvsnorm05;
-                    }
-                }
-                templow     = CLAMP(templow, 0., 1.);
-                temphigh    = CLAMP(temphigh, 0., 1.);
-
-                // !! now we should update additional data for list outlet ??
-
-                // !! need to retain previous % start position if karma~ playing !!
+            }
                 
-                // regardless of input choice ('loop_points_flag'), final system is normalised 0..1 (phase)
-                x->startsel = templow * bframesm1;                  // !! (x->bframes - 1) here yes ?? ...
-                x->maxloop = x->endsel = temphigh * bframesm1;      // !! ...
-                // always update these <<-- raja had it only if (argc == 1) !!
-                karma_window(x, x->selection);
-                karma_start(x, x->startpos);
+            if (argc >= 2) {
+
+                if (atom_gettype(argv + 1) == A_FLOAT) {
+                    //if (temphigh <= 0.) {
+                    if (temphigh < 0.) {
+                        temphightemp = temphigh;
+                        temphigh = atom_getfloat(argv + 1);
+                        templow = temphightemp;
+                    } else {
+                        templow = atom_getfloat(argv + 1);
+                        if (templow < 0.) {
+                            object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
+                            templow = 0.;
+                        }   // !! do maximum check later !!
+                    }
+                } else if (atom_gettype(argv + 1) == A_LONG) {
+                    //if (temphigh <= 0.) {
+                    if (temphigh < 0.) {
+                        temphightemp = temphigh;
+                        temphigh = (double)atom_getlong(argv + 1);  // even if samples ??
+                        templow = temphightemp;
+                    } else {
+                        templow = (double)atom_getlong(argv + 1);   // even if samples ??
+                        if (templow < 0.) {
+                            object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
+                            templow = 0.;
+                        }   // !! do maximum check later !!
+                    }
+                } else if (atom_gettype(argv + 1) == A_SYM) {
+                    loop_points_sym = atom_getsym(argv + 1);
+                    if (loop_points_sym == gensym("dummy")) {
+                        // !! "dummy" is silent, move on...
+                        loop_points_flag = 2;    // default ms
+                        loop_points_sym = gensym("ms");     // !!
+                    }
+                } else {
+                    //temphigh = -1.;     // !! no - leave temphigh alone in case only arg #2 is an error
+                    //templow = -1.;
+                    object_warn((t_object *) x, "%s message does not understand arg no.2, setting loop points to minimum (and maximum)", s->s_name);
+                }
                 
             }
+
+            // by this stage in routine, if tempLOW < 0., it has not been set and should be set to default (0.) regardless of 'loop_points_flag'
+            if (templow < 0.)
+                templow = 0.;
+
+            if (loop_points_flag == 0) {            // if PHASE
+                // by this stage in routine, if tempHIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
+                if (temphigh < 0.)
+                    temphigh = 1.;                                      // already normalised 0..1
+                
+                // templow already treated as phase 0..1
+            } else if (loop_points_flag == 1) {     // if SAMPLES
+                // by this stage in routine, if tempHIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
+                if (temphigh < 0.)
+                    temphigh = 1.;                                      // already normalised 0..1
+                else
+                    temphigh = temphigh / bframesm1;                    // normalise samples high 0..1..
+
+                if (templow > 0.)
+                    templow = templow / bframesm1;                      // normalise samples low 0..1..
+            } else {                                // if MILLISECONDS (default)
+                // by this stage in routine, if tempHIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
+                if (temphigh < 0.)
+                    temphigh = 1.;                                      // already normalised 0..1
+                else
+                    temphigh = temphigh / bframesms;                    // normalise milliseconds high 0..1..
+
+                if (templow > 0.)
+                    templow = templow / bframesms;                      // normalise milliseconds low 0..1..
+            }
+
+            // !! treated as normalised 0..1 from here on ... min/max & check & clamp once normalisation has occurred
+            templowtemp = templow;
+            temphightemp = temphigh;
+            templow     = MIN(templowtemp, temphightemp);   // templow, temphigh = sort_double(templow, temphigh);
+            temphigh    = MAX(templowtemp, temphightemp);
+            if (templow > 1.) {                             // already sorted (minmax), so if this is the case we know we are fucked
+                object_warn((t_object *) x, "loop minimum cannot be greater than available buffer~ size, setting to buffer~ size minus vectorsize");
+                templow = 1. - bvsnorm;
+            }
+            if (temphigh > 1.) {
+                object_warn((t_object *) x, "loop maximum cannot be greater than available buffer~ size, setting to buffer~ size");
+                temphigh = 1.;
+            }
+            // finally check for minimum size ...
+            if ( (temphigh - templow) < bvsnorm ) {
+                object_warn((t_object *) x, "loop size (loop maximum minus loop minimum) cannot be this small, minimum is vectorsize internally (currently using %.0f samples)", x->vs);
+                if ( (templow - bvsnorm05) < 0. ) {
+                    templow = 0.;
+                    temphigh = bvsnorm;
+                } else if ( (temphigh + bvsnorm05) > 1. ) {
+                    temphigh = 1.;
+                    templow = 1. - bvsnorm;
+                } else {
+                    templow = templow - bvsnorm05;
+                    temphigh = temphigh + bvsnorm05;
+                }
+            }
+            templow     = CLAMP(templow, 0., 1.);
+            temphigh    = CLAMP(temphigh, 0., 1.);
+
+            // !! now we should update additional data for list outlet ??
+
+            // !! need to retain previous % start position if karma~ playing !!
+            
+            // regardless of input choice ('loop_points_flag'), final system is normalised 0..1 (phase)
+            x->startsel = templow * bframesm1;                  // !! (x->bframes - 1) here yes ?? ...
+            x->maxloop = x->endsel = temphigh * bframesm1;      // !! ...
+            //if (argc == 1) {                                  // always update these ?? <<-- raja had it only if (argc == 1)
+                karma_window(x, x->selection);
+                karma_start(x, x->startpos);
+            //}
+
+            post("%s message: buffer~ %s", s->s_name, b->s_name);
+            post("loop start normalised %.2f, loop end normalised %.2f, units %s", templow, temphigh, *loop_points_sym);
+            
+            //x->buf_temp = 0;                                  // should dspfree the temp buffer here ??
 
         }
 
@@ -953,133 +984,178 @@ void karma_buf_change(t_karma *x, t_symbol *s, short argc, t_atom *argv) // " se
 
 }
 
+void karma_buf_change(t_karma *x, t_symbol *s, short ac, t_atom *av)    // " set ..... "
+{
+    t_atom      store_av[4];
+    t_symbol   *dummy;
+    short       i, j, a;
+    dummy       = gensym("dummy");
+    a           = ac;
+
+    // if error return...
+    
+    if (a <= 0) {
+        object_error((t_object *) x, "%s message must be followed by argument(s) (it does nothing alone)", s->s_name);
+        return;
+    }
+    
+    if (atom_gettype(av + 0) != A_SYM) {
+        object_error((t_object *)x, "first argument to %s message must be a symbol (associated buffer~ name)", s->s_name);
+        return;
+    }
+    
+    // ...else pass and defer
+    
+    if (a > 4) {
+
+        object_warn((t_object *) x, "too many arguments for %s message, truncating to first four args", s->s_name);
+        a   = 4;
+
+        for (i = 0; i < a; i++) {
+            store_av[i] = av[i];
+        }
+
+    } else {
+        
+        for (i = 0; i < a; i++) {
+            store_av[i] = av[i];
+        }
+        
+        for (j = i; j < 4; j++) {
+            atom_setsym(store_av + j, dummy);
+        }
+
+    }
+
+    defer(x, (method)karma_buf_change_internal, s, ac, store_av);       // main method
+
+}
+
+// does not have to be defered ??
 // pete says: i know this branching is horrible, will rewrite soon...
-void karma_setloop(t_karma *x, t_symbol *s, short argc, t_atom *argv)    // " setloop ..... ")
+void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)   // " setloop ..... "
 {
     t_symbol *loop_points_sym;
-    long loop_points_flag = 2;                      // specify start/end loop points: 0 = in phase, 1 = in samples, 2 = in milliseconds (default)
+    long loop_points_flag;                          // specify start/end loop points: 0 = in phase, 1 = in samples, 2 = in milliseconds (default)
     double bframesm1, bframesms, bvsnorm, bvsnorm05;// bframesm1 not needed ?, bframesms is bollox ?
-    double templow, templowtemp, temphigh;
-    templow = templowtemp = -1.0;
-    temphigh = -1.0;
-    
+    double templow, templowtemp, temphigh, temphightemp;
 /*
-    if (x->stopallowed == 0) {  // these should only be (re)set here if karma~ NOT currently playing ??
+    if (x->stopallowed == 0) {                      // these should only be (re)set here if karma~ NOT currently playing ??
         x->directionorig = 0;
         x->maxhead = x->playhead = 0.0;
-        x->recordhead = -1;
+    } else {
+        x->maxhead = x->playhead;                   // !! we want a 'takeover' mode...
     }
-*/
-    x->directionorig = 0;
-    x->maxhead = x->playhead;// = 0.0;             // !! no, we want a 'takeover' mode...
     x->recordhead = -1;
-    
+*/
     bframesm1   = ((double)x->bframes - 1);
     bframesms   = bframesm1 / x->bmsr * x->srscale;             // buffersize in milliseconds
     bvsnorm     = x->vsnorm * (x->bsr / bframesm1);             // vectorsize in (double) % 0..1 phase units of buffer~
     bvsnorm05   = bvsnorm * 0.5;                                // half vectorsize (normalised)
     
-    if (argc <= 0)
-    {
-        templow = -1.;
-        temphigh = -1.;
+    loop_points_sym = gensym("ms");//NULL;     // !!
+    loop_points_flag = 2;
+    templow = -1.;
+    temphigh = -1.;
+    
+    // maximum length message (3 atoms after 'setloop') = " setloop ...
+    // ... 0::float::loop start/size [1::float::loop end] [2::symbol::loop points type] "
+    
+    if (argc >= 3) {
         
-    } else {
+        if (argc > 3)
+            object_warn((t_object *) x, "too many arguments for %s message, truncating to first three args", s->s_name);
         
-        // maximum length message (3 atoms after 'setloop') = " setloop ...
-        // ... 0::float::loop start/size [1::float::loop end] [2::symbol::loop points type] ...
-        
-        if (argc >= 3) {
-            
-            if (argc > 3)
-                object_warn((t_object *) x, "too many arguments for %s message, truncating to first three args", s->s_name);
-            
-            if (atom_gettype(argv + 2) == A_SYM) {
-                loop_points_sym = atom_getsym(argv + 2);
-                if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )                    // phase 0..1
-                    loop_points_flag = 0;
-                else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )                                  // samples
-                    loop_points_flag = 1;
-                else {                                 // ms
-                    loop_points_flag = 2;
-                    //loop_points_sym = gensym("ms");
-                }
-            } else if (atom_gettype(argv + 2) == A_LONG) {  // can just be int
-                loop_points_flag = atom_getlong(argv + 2);
-            } else if (atom_gettype(argv + 2) == A_FLOAT) { // convert if error float
-                loop_points_flag = (long)atom_getfloat(argv + 2);
-            } else {
-                object_warn((t_object *) x, "%s message does not understand arg no.3, using milliseconds for args 1 & 2", s->s_name);
-                loop_points_flag = 2;    // default ms
-                //loop_points_sym = gensym("ms");
+        if (atom_gettype(argv + 2) == A_SYM) {
+            loop_points_sym = atom_getsym(argv + 2);
+            if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )    // phase 0..1
+                loop_points_flag = 0;
+            else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )                  // samples
+                loop_points_flag = 1;
+            else {                                  // ms
+                loop_points_flag = 2;
+                loop_points_sym = gensym("ms");     // !!
             }
-            
-            loop_points_flag = CLAMP(loop_points_flag, 0, 2);
-            
+        } else if (atom_gettype(argv + 2) == A_LONG) {  // can just be int
+            loop_points_flag = atom_getlong(argv + 2);
+        } else if (atom_gettype(argv + 2) == A_FLOAT) { // convert if error float
+            loop_points_flag = (long)atom_getfloat(argv + 2);
+        } else {
+            object_warn((t_object *) x, "%s message does not understand arg no.3, using milliseconds for args 1 & 2", s->s_name);
+            loop_points_flag = 2;    // default ms
+            loop_points_sym = gensym("ms");     // !!
         }
         
-        if (argc >= 2) {
-            
-            if (atom_gettype(argv + 1) == A_FLOAT) {
-                temphigh = atom_getfloat(argv + 1);
-                if (temphigh < 0.) {
-                    object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
-                    temphigh = 0.;
-                }   // !! do maximum check later !!
-            } else if (atom_gettype(argv + 1) == A_LONG) {
-                temphigh = (double)atom_getlong(argv + 1);  // even if samples ??
-                if (temphigh < 0.) {
-                    object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
-                    temphigh = 0.;
-                }   // !! do maximum check later !!
-            } else if ( (atom_gettype(argv + 1) == A_SYM) && (argc < 3) ) {
-                temphigh = -1.;
-                loop_points_sym = atom_getsym(argv + 1);
-                if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )              // phase 0..1
-                    loop_points_flag = 0;
-                else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )                            // samples
-                    loop_points_flag = 1;
-                else if ( (loop_points_sym == gensym("milliseconds")) || (loop_points_sym == gensym("MS")) || (loop_points_sym == gensym("ms")) )               // ms
-                    loop_points_flag = 2;
-                else
-                    object_warn((t_object *) x, "%s message does not understand arg no.2, setting to milliseconds & maximum", s->s_name);
-//                  loop_points_sym = gensym("ms");
-            } else {
-                temphigh = -1.;
-                object_warn((t_object *) x, "%s message does not understand arg no.2, setting unit to maximum", s->s_name);
-            }
-        }
+        loop_points_flag = CLAMP(loop_points_flag, 0, 2);
         
-        if (argc >= 1) {
-            
-            if (atom_gettype(argv + 0) == A_FLOAT) {
-                if (temphigh <= 0.) {
-                    temphigh = atom_getfloat(argv + 0);
-                    templow = 0.;
-                } else {
-                    templow = atom_getfloat(argv + 0);
-                    if (templow < 0.) {
-                        object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
-                        templow = 0.;
-                    }   // !! do maximum check later !!
-                }
-            } else if (atom_gettype(argv + 0) == A_LONG) {
-                if (temphigh <= 0.) {
-                    temphigh = (double)atom_getlong(argv + 0);  // even if samples ??
-                    templow = 0.;
-                } else {
-                    templow = (double)atom_getlong(argv + 0);   // even if samples ??
-                    if (templow < 0.) {
-                        object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
-                        templow = 0.;
-                    }   // !! do maximum check later !!
-                }
-            } else {
-//              temphigh = -1.;     // !! no - leave temphigh alone in case only arg #2 is an error
-                templow = -1.;
-                object_warn((t_object *) x, "%s message does not understand arg no.2, setting loop points to minimum (and maximum)", s->s_name);
+    }
+    
+    if (argc >= 2) {
+        
+        if (atom_gettype(argv + 1) == A_FLOAT) {
+            temphigh = atom_getfloat(argv + 1);
+            if (temphigh < 0.) {
+                object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
+                //temphigh = 0.;
+            }   // !! do maximum check later !!
+        } else if (atom_gettype(argv + 1) == A_LONG) {
+            temphigh = (double)atom_getlong(argv + 1);  // even if samples ??
+            if (temphigh < 0.) {
+                object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
+                //temphigh = 0.;
+            }   // !! do maximum check later !!
+        } else if ( (atom_gettype(argv + 1) == A_SYM) && (argc < 3) ) {
+            //temphigh = -1.;
+            loop_points_sym = atom_getsym(argv + 1);
+            if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )              // phase 0..1
+                loop_points_flag = 0;
+            else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )                            // samples
+                loop_points_flag = 1;
+            else if ( (loop_points_sym == gensym("milliseconds")) || (loop_points_sym == gensym("MS")) || (loop_points_sym == gensym("ms")) )               // ms
+                loop_points_flag = 2;
+            else {
+                object_warn((t_object *) x, "%s message does not understand arg no.2, setting to milliseconds", s->s_name);
+                loop_points_flag = 2;
+                loop_points_sym = gensym("ms");     // !!
             }
-            
+        } else {
+            //temphigh = -1.;
+            object_warn((t_object *) x, "%s message does not understand arg no.2, setting unit to maximum", s->s_name);
+        }
+    }
+    
+    if (argc >= 1) {
+        
+        if (atom_gettype(argv + 0) == A_FLOAT) {
+            //if (temphigh <= 0.) {
+            if (temphigh < 0.) {
+                temphightemp = temphigh;
+                temphigh = atom_getfloat(argv + 0);
+                templow = temphightemp;
+            } else {
+                templow = atom_getfloat(argv + 0);
+                if (templow < 0.) {
+                    object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
+                    templow = 0.;
+                }   // !! do maximum check later !!
+            }
+        } else if (atom_gettype(argv + 0) == A_LONG) {
+            //if (temphigh <= 0.) {
+            if (temphigh < 0.) {
+                temphightemp = temphigh;
+                temphigh = (double)atom_getlong(argv + 0);  // even if samples ??
+                templow = temphightemp;
+            } else {
+                templow = (double)atom_getlong(argv + 0);   // even if samples ??
+                if (templow < 0.) {
+                    object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
+                    templow = 0.;
+                }   // !! do maximum check later !!
+            }
+        } else {
+            //temphigh = -1.;     // !! no - leave temphigh alone in case only arg #2 is an error
+            //templow = -1.;
+            object_warn((t_object *) x, "%s message does not understand arg no.1, resetting loop point", s->s_name);
         }
         
     }
@@ -1100,7 +1176,7 @@ void karma_setloop(t_karma *x, t_symbol *s, short argc, t_atom *argv)    // " se
             temphigh = 1.;                                      // already normalised 0..1
         else
             temphigh = temphigh / bframesm1;                    // normalise samples high 0..1..
-
+        
         if (templow > 0.)
             templow = templow / bframesm1;                      // normalise samples low 0..1..
     } else {                                // if MILLISECONDS (default)
@@ -1109,15 +1185,16 @@ void karma_setloop(t_karma *x, t_symbol *s, short argc, t_atom *argv)    // " se
             temphigh = 1.;                                      // already normalised 0..1
         else
             temphigh = temphigh / bframesms;                    // normalise milliseconds high 0..1..
-
+        
         if (templow > 0.)
             templow = templow / bframesms;                      // normalise milliseconds low 0..1..
     }
-    
-    // !! normalised 0..1 from here on ... min/max & check & clamp once normalisation has occurred
+
+    // !! treated as normalised 0..1 from here on ... min/max & check & clamp once normalisation has occurred
     templowtemp = templow;
-    templow     = MIN(templow, temphigh);           // templow, temphigh = sort_double(templow, temphigh);
-    temphigh    = MAX(templowtemp, temphigh);
+    temphightemp = temphigh;
+    templow     = MIN(templowtemp, temphightemp);   // templow, temphigh = sort_double(templow, temphigh);
+    temphigh    = MAX(templowtemp, temphightemp);
     if (templow > 1.) {                             // already sorted (minmax), so if this is the case we know we are fucked
         object_warn((t_object *) x, "loop minimum cannot be greater than available buffer~ size, setting to buffer~ size minus vectorsize");
         templow = 1. - bvsnorm;
@@ -1145,15 +1222,25 @@ void karma_setloop(t_karma *x, t_symbol *s, short argc, t_atom *argv)    // " se
     
     // !! now we should update additional data for list outlet ??
     
-    // !! need to retain previous % start position if karma~ playing ??
+    // !! need to retain previous % start position if karma~ playing !!
     
     // regardless of input choice ('loop_points_flag'), final system is normalised 0..1 (phase)
-    x->startsel = templow * bframesm1;                  // !! (x->bframes - 1) parentheses here yes ?? ...
+    x->startsel = templow * bframesm1;                  // !! (x->bframes - 1) here yes ?? ...
     x->maxloop = x->endsel = temphigh * bframesm1;      // !! ...
-    // always update these <<-- raja had it only if (argc == 1) !!
-    karma_window(x, x->selection);
-    karma_start(x, x->startpos);
-    
+    // assume we are always changing when using "setloop" message (unless resetting "setloop" alone) ??
+    //if (argc == 0) {
+        karma_window(x, x->selection);
+        karma_start(x, x->startpos);
+    //}
+
+    post("%s message:", s->s_name);
+    post("loop start normalised %.2f, loop end normalised %.2f, units %s", templow, temphigh, *loop_points_sym);
+
+}
+
+void karma_setloop(t_karma *x, t_symbol *s, short ac, t_atom *av)   // " setloop ..... "
+{
+    defer(x, (method)karma_setloop_internal, s, ac, av);            // main method   // does not have to be defered ??
 }
 
 void karma_clock_list(t_karma *x)
@@ -1173,8 +1260,8 @@ void karma_clock_list(t_karma *x)
         double playhead = x->playhead;
         double xtlwin = x->selection;
         
-        t_atom datalist[7];
-        atom_setfloat(  datalist + 0,   CLAMP((directionorig < 0) ? ((playhead - (frames - maxloop)) / maxloop) : (playhead / maxloop), 0., 1.) );  // position float % 0..1
+        t_atom datalist[7];                                                                                             // position float % 0..1
+        atom_setfloat(  datalist + 0,   CLAMP((directionorig < 0) ? ((playhead - (frames - maxloop)) / maxloop) : (playhead / maxloop), 0., 1.) );
         atom_setlong(   datalist + 1,   go  );                                                                          // play flag int
         atom_setlong(   datalist + 2,   record );                                                                          // record flag int
         atom_setfloat(  datalist + 3, ((directionorig < 0) ? ((frames - maxloop) / bmsr) : 0.0)     );                  // start float ms
