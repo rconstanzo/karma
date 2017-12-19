@@ -122,10 +122,10 @@ typedef struct _karma {
     double  overdubprev;    // a 'current' overdub amount ("for smoothing overdub amp changes")
 
     long    syncoutlet;     // make sync outlet ? (object arg #3: 0/1 flag) <<-- TODO: switch to private @ttribute instead
+    //long  boffset;        // zero indexed buffer channel # (default 0), user settable, not buffer~ queried -->> TODO
 
     t_ptr_int   bframes;    // # of buffer frames (stereo has 2 samples per frame, etc.)
     t_ptr_int   bchans;     // number of buffer channels
-    t_ptr_int   boffset;    // zero indexed buffer channel # (default 0), user settable, not buffer~ queried -->> TODO
     t_ptr_int   chans;      // number of audio channels choice (object arg #2: 1 / 2 / 4)
 
     t_ptr_int   interpflag; // playback interpolation, 0 = linear, 1 = cubic, 2 = spline
@@ -165,7 +165,8 @@ typedef struct _karma {
     t_bool  recordinit;     // initial recording ("...flag to determine whether to apply the 'record' message to initial loop recording or not")
     t_bool  initinit;       // initial initialise (raja: "...hack i used to determine whether DSP is turned on for the very first time or not")
     t_bool  initskip;       // is initialising = 0
-    t_bool  buf_modified;   // buffer has been modified flag
+    t_bool  buf_modified;   // buffer has been modified boolbuf_modified_temp
+    t_bool  buf_mod_temp;   // temp buffer has been modified bool
     t_bool  clockgo;        // activate clock (for list outlet)
 
 //  t_atom   datalist[7];   // !! TODO - store list ??
@@ -184,21 +185,25 @@ void        karma_record(t_karma *x);
 void        karma_start(t_karma *x, double positionstart);
 
 t_max_err   karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat);
+t_max_err   karma_buf_not_temp(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat);
 
 void        karma_assist(t_karma *x, void *b, long m, long a, char *s);
 void        karma_buf_dblclick(t_karma *x);
 
 void        karma_overdub(t_karma *x, double amplitude);
 void        karma_window(t_karma *x, double duration);
-void        karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv);
+//void      karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv);
 void        karma_setloop(t_karma *x, t_symbol *s, short ac, t_atom *av);
 
 void        karma_buf_setup(t_karma *x, t_symbol *s);
 void        karma_buf_modset(t_karma *x, t_buffer_obj *b);
 void        karma_clock_list(t_karma *x);
-void        karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv);
+//void      karma_buf_values_internal(t_karma *x, double low, double high, long loop_points_flag, t_bool caller);
+//void      karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv);
 void        karma_buf_change(t_karma *x, t_symbol *s, short ac, t_atom *av);
-void        karma_jump(t_karma *x, double j);
+//void      karma_offset(t_karma *x, long channeloffset);   <<-- TODO
+
+void        karma_jump(t_karma *x, double jumpposition);
 void        karma_append(t_karma *x);
 
 // dsp:
@@ -211,7 +216,8 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
 void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr);
 
 
-static  t_symbol    *ps_nothing, *ps_buffer_modified;
+static  t_symbol    *ps_nothing, *ps_dummy, *ps_buffer_modified;
+static  t_symbol    *ps_phase, *ps_samples, *ps_milliseconds;
 static  t_class     *karma_class = NULL;
 
 /*
@@ -451,27 +457,34 @@ void ext_main(void *r)
     // @description (get ready for) append recording to end of currently used segment (as long as buffer space available) <br />
     class_addmethod(c, (method)karma_append,    "append",               0);
     // @method setloop @digest set <o>karma~</o> loop points (not 'window')
-    // @description points (start/end) for setting <o>karma~</o> loop (not 'window') <br />
+    // @description points (start/end) for setting <o>karma~</o> loop in selected buffer~ (not 'window') <br />
+    // "setloop" with no args sets loop to entire buffer~ length
     // @marg 0 @name loop_start_point @optional 1 @type float
     // @marg 1 @name loop_end_point @optional 1 @type float
     // @marg 2 @name points_type @optional 1 @type symbol
     class_addmethod(c, (method)karma_setloop,   "setloop",  A_GIMME,    0);
     // @method set @digest set (new) buffer
     // @description set (new) buffer for recording or playback, can switch buffers in realtime <br />
+    // "set buffer_name" with no other args sets (new) buffer~ and (re)sets loop points to entire buffer~ length
     // @marg 0 @name buffer_name @optional 0 @type symbol
     // @marg 1 @name loop_start_point @optional 1 @type float
     // @marg 2 @name loop_end_point @optional 1 @type float
     // @marg 3 @name points_type @optional 1 @type symbol
     class_addmethod(c, (method)karma_buf_change, "set",     A_GIMME,    0);
+    // @method offset @digest offset referenced buffer~ channel
+    // @description offset referenced buffer~ channel, zero-indexed, default 0 (no offset) <br />
+    // @marg 0 @name offset @optional 0 @type int
+//  class_addmethod(c, (method)karma_offset,    "offset",   A_LONG,     0);
     // @method overdub @digest overdubbing amplitude
     // @description amplitude (0..1) for when in overdubbing state <br />
     // @marg 0 @name overdub @optional 0 @type float
     class_addmethod(c, (method)karma_overdub,   "overdub",  A_FLOAT,    0);
     
-    class_addmethod(c, (method)karma_dsp64,         "dsp64",    A_CANT, 0);
-    class_addmethod(c, (method)karma_assist,        "assist",   A_CANT, 0);
-    class_addmethod(c, (method)karma_buf_dblclick,  "dblclick", A_CANT, 0);
-    class_addmethod(c, (method)karma_buf_notify,    "notify",   A_CANT, 0);
+    class_addmethod(c, (method)karma_dsp64,             "dsp64",    A_CANT, 0);
+    class_addmethod(c, (method)karma_assist,            "assist",   A_CANT, 0);
+    class_addmethod(c, (method)karma_buf_dblclick,      "dblclick", A_CANT, 0);
+    class_addmethod(c, (method)karma_buf_notify,        "notify",   A_CANT, 0);
+    class_addmethod(c, (method)karma_buf_not_temp,      "notify",   A_CANT, 0);
 
     CLASS_ATTR_LONG(c, "report", 0, t_karma, reportlist);       // !! change to "reporttime" or "listreport" or "listinterval" ??
     CLASS_ATTR_FILTER_MIN(c, "report", 0);
@@ -510,7 +523,12 @@ void ext_main(void *r)
     karma_class = c;
     
     ps_nothing = gensym("");
+    ps_dummy = gensym("dummy");
     ps_buffer_modified = gensym("buffer_modified");
+    
+    ps_phase = gensym("phase");
+    ps_samples = gensym("samples");
+    ps_milliseconds = gensym("milliseconds");
 
     // identify build
     post("-- karma~:");
@@ -630,8 +648,10 @@ void karma_free(t_karma *x)
 {
     if (x->initskip) {
         dsp_free((t_pxobject *)x);
+
         object_free(x->buf);
         object_free(x->buf_temp);
+        
         object_free(x->tclock);
         object_free(x->messout);
     }
@@ -668,7 +688,7 @@ void karma_buf_setup(t_karma *x, t_symbol *s)
         x->bsr = buffer_getsamplerate(buf);
         x->srscale = x->bsr / x->sr;
         x->startpos = 0.0;
-        x->selection = 1.;
+        x->selection = 1.0;
         x->maxloop = x->endsel = x->bframes - 1;
     }
 }
@@ -699,22 +719,125 @@ void karma_buf_modset(t_karma *x, t_buffer_obj *b)
     }
 }
 
-// karma_buf_change method defered  // " set ..... "
-// pete says: i know this branching is horrible, will rewrite soon...
-void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)
+// called by 'karma_buf_change_internal' & 'karma_setloop_internal'
+void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long loop_points_flag, t_bool caller)
 {
     t_buffer_obj *buf;
+    t_symbol *loop_points_sym = 0;                      // temp
+    double bframesm1, bframesms, bvsnorm, bvsnorm05;    // bframesm1 not needed ?, bframesms is bollox ?
+    double low, lowtemp, high, hightemp;
+    low = templow;
+    high = temphigh;
+
+    if (caller) {                                       // only if called from 'karma_buf_change_internal'
+        buf         = buffer_ref_getobject(x->buf);
+
+        x->bchans   = buffer_getchannelcount(buf);
+        x->bframes  = buffer_getframecount(buf);
+        x->bmsr     = buffer_getmillisamplerate(buf);
+        x->bsr      = buffer_getsamplerate(buf);
+        x->srscale  = x->bsr / x->sr;
+    }
+
+    bframesm1   = (double)(x->bframes - 1);
+    bframesms   = bframesm1 / x->bmsr * x->srscale;     // buffersize in milliseconds
+    bvsnorm     = x->vsnorm * (x->bsr / bframesm1);     // vectorsize in (double) % 0..1 phase units of buffer~
+    bvsnorm05   = bvsnorm * 0.5;                        // half vectorsize (normalised)
+    
+    // by this stage in routine, if LOW < 0., it has not been set and should be set to default (0.) regardless of 'loop_points_flag'
+    if (low < 0.)
+        low = 0.;
+    
+    if (loop_points_flag == 0) {            // if PHASE
+        // by this stage in routine, if HIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
+        if (high < 0.)
+            high = 1.;                                  // already normalised 0..1
+        
+        // templow already treated as phase 0..1
+    } else if (loop_points_flag == 1) {     // if SAMPLES
+        // by this stage in routine, if HIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
+        if (high < 0.)
+            high = 1.;                                  // already normalised 0..1
+        else
+            high = high / bframesm1;                    // normalise samples high 0..1..
+        
+        if (low > 0.)
+            low = low / bframesm1;                      // normalise samples low 0..1..
+    } else {                                // if MILLISECONDS (default)
+        // by this stage in routine, if HIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
+        if (high < 0.)
+            high = 1.;                                  // already normalised 0..1
+        else
+            high = high / bframesms;                    // normalise milliseconds high 0..1..
+        
+        if (low > 0.)
+            low = low / bframesms;                      // normalise milliseconds low 0..1..
+    }
+    
+    // !! treated as normalised 0..1 from here on ... min/max & check & clamp once normalisation has occurred
+    lowtemp = low;
+    hightemp = high;
+    low     = MIN(lowtemp, hightemp);                   // low, high = sort_double(low, high);
+    high    = MAX(lowtemp, hightemp);
+
+    if (low > 1.) {                                     // already sorted (minmax), so if this is the case we know we are fucked
+        object_warn((t_object *) x, "loop minimum cannot be greater than available buffer~ size, setting to buffer~ size minus vectorsize");
+        low = 1. - bvsnorm;
+    }
+    if (high > 1.) {
+        object_warn((t_object *) x, "loop maximum cannot be greater than available buffer~ size, setting to buffer~ size");
+        high = 1.;
+    }
+
+    // finally check for minimum loop points size ...
+    if ( (high - low) < bvsnorm ) {
+        object_warn((t_object *) x, "loop size cannot be this small, minimum is vectorsize internally (currently using %.0f samples)", x->vs);
+        if ( (low - bvsnorm05) < 0. ) {
+            low = 0.;
+            high = bvsnorm;
+        } else if ( (high + bvsnorm05) > 1. ) {
+            high = 1.;
+            low = 1. - bvsnorm;
+        } else {
+            low = low - bvsnorm05;
+            high = high + bvsnorm05;
+        }
+    }
+    low     = CLAMP(low, 0., 1.);
+    high    = CLAMP(high, 0., 1.);
+    
+    // !! now we should update additional data for list outlet ??
+    
+    // regardless of input choice ('loop_points_flag'), final system is normalised 0..1 (phase)
+
+    x->startsel = low * bframesm1;
+    x->maxloop = x->endsel = high * bframesm1;
+    
+    // update
+    karma_window(x, x->selection);
+    karma_start(x, x->startpos);
+    
+    // temp
+    loop_points_sym = (loop_points_flag > 1) ? ps_milliseconds : ((loop_points_flag < 1) ? ps_phase : ps_samples);
+    post("loop start normalised %.2f, loop end normalised %.2f, units %s", low, high, *loop_points_sym);
+
+}
+
+// karma_buf_change method defered
+// pete says: i know this branching is horrible, will rewrite soon...
+void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)   // " set ..... "
+{
+    t_bool callerid = true;             // identify caller of 'karma_buf_values_internal'
     t_buffer_obj *buf_temp;
     t_symbol *b;
-    t_symbol *b_temp;
-    t_symbol *loop_points_sym;
-    long loop_points_flag;                          // specify start/end loop points: 0 = in phase, 1 = in samples, 2 = in milliseconds (default)
-    double bframesm1, bframesms, bvsnorm, bvsnorm05;// bframesm1 not needed ?, bframesms is bollox ?
-    double templow, templowtemp, temphigh, temphightemp;
+    t_symbol *b_temp = 0;
+    t_symbol *loop_points_sym = 0;
+    long loop_points_flag;              // specify start/end loop points: 0 = in phase, 1 = in samples, 2 = in milliseconds (default)
+    double templow, temphigh, temphightemp;
 
-    // error checking first .....
+    // error check .....
 
-    b_temp  = atom_getsym(argv + 0);    // already arg checked to be A_SYM
+    b_temp  = atom_getsym(argv + 0);    // already arg checked to be A_SYM in karma_buf_change
     
     if (b_temp == ps_nothing)
     {
@@ -730,8 +853,8 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
         
         if (!x->buf_temp)
             x->buf_temp = buffer_ref_new((t_object *)x, b_temp);
-        else
-            buffer_ref_set(x->buf_temp, b_temp);    // this should never get called ??
+        else                            // this should never get called here ??
+            buffer_ref_set(x->buf_temp, b_temp);
         
         buf_temp = buffer_ref_getobject(x->buf_temp);
         
@@ -742,8 +865,7 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
             return;
 
         } else {
-            // !! if just "set [buffername]" with no additional args and [buffername]...
-            // ...already set, message will reset loop points to min / max !!
+            
             x->buf_temp = 0;            // should dspfree the temp buffer here ??
             
             b  = atom_getsym(argv + 0); // already arg checked
@@ -753,17 +875,14 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
             if (!x->buf) {
                 x->buf = buffer_ref_new((t_object *)x, b);
                 x->directionorig = 0;
-                x->recordhead = -1;
             } else {
                 buffer_ref_set(x->buf, b);
-                x->recordhead = -1;
             }
-            
-            buf = buffer_ref_getobject(x->buf);
 
-            loop_points_sym = gensym("ms");//NULL;
+            // !! if just "set [buffername]" with no additional args and [buffername]...
+            // ...already set, message will reset loop points to min / max !!
             loop_points_flag = 2;
-            templow = templowtemp = -1.0;
+            templow = -1.0;
             temphigh = -1.0;
 
     // ..... do it .....
@@ -774,46 +893,31 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
             } else {
                 x->maxhead = x->playhead;   // !! we want a 'takeover' mode...
             }
-
-            x->bchans   = buffer_getchannelcount(buf);
-            x->bframes  = buffer_getframecount(buf);
-            x->bmsr     = buffer_getmillisamplerate(buf);
-            x->bsr      = buffer_getsamplerate(buf);
-            x->srscale  = x->bsr / x->sr;
-
-            bframesm1   = ((double)x->bframes - 1);
-            bframesms   = bframesm1 / x->bmsr * x->srscale;             // buffersize in milliseconds
-            bvsnorm     = x->vsnorm * (x->bsr / bframesm1);             // vectorsize in (double) % 0..1 phase units of buffer~
-            bvsnorm05   = bvsnorm * 0.5;                                // half vectorsize (normalised)
+            x->recordhead = -1;
 
             // maximum length message (4[6] atoms after 'set') = " set ...
             // ... 0::symbol::buffername [1::float::loop start] [2::float::loop end] [3::symbol::loop points type] ...
             // ... [4::symbol::offset 5::int::channel # offset] "   // <<-- not implemented "offset n" yet
-            
-            if (argc >= 4) {    // will be '(argc >= 6)' ... etc ...
+
+            if (argc >= 4) {
                 
                 if (atom_gettype(argv + 3) == A_SYM) {
                     loop_points_sym = atom_getsym(argv + 3);
-                    if (loop_points_sym == gensym("dummy")) {
-                        // !! "dummy" is silent, move on...
-                        loop_points_flag = 2;    // default ms
-                        loop_points_sym = gensym("ms");     // !!
-                    } else if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )                     // phase 0..1
-                        loop_points_flag = 0;
-                    else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )                                   // samples
-                        loop_points_flag = 1;
-                    else {      // if "ms" or anything      // ms
+                    if (loop_points_sym == ps_dummy)    // !! "dummy" is silent++, move on...
                         loop_points_flag = 2;
-                        loop_points_sym = gensym("ms");     // !!
-                    }
-                } else if (atom_gettype(argv + 3) == A_LONG) {  // can just be int 0..2
+                    else if ( (loop_points_sym == ps_phase) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )// phase
+                        loop_points_flag = 0;
+                    else if ( (loop_points_sym == ps_samples) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )// samps
+                        loop_points_flag = 1;
+                    else                                // ms or anything
+                        loop_points_flag = 2;
+                } else if (atom_gettype(argv + 3) == A_LONG) {      // can just be int 0..2
                     loop_points_flag = atom_getlong(argv + 3);
-                } else if (atom_gettype(argv + 3) == A_FLOAT) { // convert if error float
+                } else if (atom_gettype(argv + 3) == A_FLOAT) {     // convert if error float
                     loop_points_flag = (long)atom_getfloat(argv + 3);
                 } else {
                     object_warn((t_object *) x, "%s message does not understand arg no.4, using milliseconds for args 2 & 3", s->s_name);
-                    loop_points_flag = 2;    // default ms
-                    loop_points_sym = gensym("ms");     // !!
+                    loop_points_flag = 2;               // default ms
                 }
 
                 loop_points_flag = CLAMP(loop_points_flag, 0, 2);
@@ -827,30 +931,27 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
                     if (temphigh < 0.) {
                         object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
                         //temphigh = 0.;
-                    }   // !! do maximum check later !!
+                    }   // !! do maximum check in karma_buf_values_internal !!
                 } else if (atom_gettype(argv + 2) == A_LONG) {
-                    temphigh = (double)atom_getlong(argv + 2);  // even if samples ??
+                    temphigh = (double)atom_getlong(argv + 2);
                     if (temphigh < 0.) {
                         object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
                         //temphigh = 0.;
-                    }   // !! do maximum check later !!
+                    }   // !! do maximum check in karma_buf_values_internal !!
                 } else if ( (atom_gettype(argv + 2) == A_SYM) && (argc < 4) ) {
                     //temphigh = -1.;
                     loop_points_sym = atom_getsym(argv + 2);
-                    if (loop_points_sym == gensym("dummy")) {
-                        // !! "dummy" is silent, move on...
-                        loop_points_flag = 2;    // default ms
-                        loop_points_sym = gensym("ms");     // !!
-                    } else if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )              // phase 0..1
+                    if (loop_points_sym == ps_dummy)    // !! "dummy" is silent++, move on...
+                        loop_points_flag = 2;
+                    else if ( (loop_points_sym == ps_phase) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )// phase
                             loop_points_flag = 0;
-                    else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )                            // samples
+                    else if ( (loop_points_sym == ps_samples) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )// samps
                             loop_points_flag = 1;
-                    else if ( (loop_points_sym == gensym("milliseconds")) || (loop_points_sym == gensym("MS")) || (loop_points_sym == gensym("ms")) )               // ms
+                    else if ( (loop_points_sym == ps_milliseconds) || (loop_points_sym == gensym("MS")) || (loop_points_sym == gensym("ms")) )// ms
                             loop_points_flag = 2;
                     else {
                         object_warn((t_object *) x, "%s message does not understand arg no.3, setting to milliseconds", s->s_name);
                         loop_points_flag = 2;
-                        loop_points_sym = gensym("ms");     // !!
                     }
                 } else {
                     //temphigh = -1.;
@@ -861,7 +962,6 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
             if (argc >= 2) {
 
                 if (atom_gettype(argv + 1) == A_FLOAT) {
-                    //if (temphigh <= 0.) {
                     if (temphigh < 0.) {
                         temphightemp = temphigh;
                         temphigh = atom_getfloat(argv + 1);
@@ -871,112 +971,40 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
                         if (templow < 0.) {
                             object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
                             templow = 0.;
-                        }   // !! do maximum check later !!
+                        }   // !! do maximum check in karma_buf_values_internal !!
                     }
                 } else if (atom_gettype(argv + 1) == A_LONG) {
-                    //if (temphigh <= 0.) {
                     if (temphigh < 0.) {
                         temphightemp = temphigh;
-                        temphigh = (double)atom_getlong(argv + 1);  // even if samples ??
+                        temphigh = (double)atom_getlong(argv + 1);
                         templow = temphightemp;
                     } else {
-                        templow = (double)atom_getlong(argv + 1);   // even if samples ??
+                        templow = (double)atom_getlong(argv + 1);
                         if (templow < 0.) {
                             object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
                             templow = 0.;
-                        }   // !! do maximum check later !!
+                        }   // !! do maximum check in karma_buf_values_internal !!
                     }
                 } else if (atom_gettype(argv + 1) == A_SYM) {
                     loop_points_sym = atom_getsym(argv + 1);
-                    if (loop_points_sym == gensym("dummy")) {
-                        // !! "dummy" is silent, move on...
-                        loop_points_flag = 2;    // default ms
-                        loop_points_sym = gensym("ms");     // !!
-                    }
+                    if (loop_points_sym == ps_dummy)    // !! "dummy" is silent++, move on...
+                        loop_points_flag = 2;           // default ms
+                    else
+                        object_warn((t_object *) x, "%s message does not understand arg no.2, setting loop points to minimum (and maximum)", s->s_name);
                 } else {
-                    //temphigh = -1.;     // !! no - leave temphigh alone in case only arg #2 is an error
+                    //temphigh = -1.;                   // !! no - leave temphigh alone in case only arg #2 is an error
                     //templow = -1.;
                     object_warn((t_object *) x, "%s message does not understand arg no.2, setting loop points to minimum (and maximum)", s->s_name);
                 }
                 
             }
 
-            // by this stage in routine, if tempLOW < 0., it has not been set and should be set to default (0.) regardless of 'loop_points_flag'
-            if (templow < 0.)
-                templow = 0.;
-
-            if (loop_points_flag == 0) {            // if PHASE
-                // by this stage in routine, if tempHIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
-                if (temphigh < 0.)
-                    temphigh = 1.;                                      // already normalised 0..1
-                
-                // templow already treated as phase 0..1
-            } else if (loop_points_flag == 1) {     // if SAMPLES
-                // by this stage in routine, if tempHIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
-                if (temphigh < 0.)
-                    temphigh = 1.;                                      // already normalised 0..1
-                else
-                    temphigh = temphigh / bframesm1;                    // normalise samples high 0..1..
-
-                if (templow > 0.)
-                    templow = templow / bframesm1;                      // normalise samples low 0..1..
-            } else {                                // if MILLISECONDS (default)
-                // by this stage in routine, if tempHIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
-                if (temphigh < 0.)
-                    temphigh = 1.;                                      // already normalised 0..1
-                else
-                    temphigh = temphigh / bframesms;                    // normalise milliseconds high 0..1..
-
-                if (templow > 0.)
-                    templow = templow / bframesms;                      // normalise milliseconds low 0..1..
-            }
-
-            // !! treated as normalised 0..1 from here on ... min/max & check & clamp once normalisation has occurred
-            templowtemp = templow;
-            temphightemp = temphigh;
-            templow     = MIN(templowtemp, temphightemp);   // templow, temphigh = sort_double(templow, temphigh);
-            temphigh    = MAX(templowtemp, temphightemp);
-            if (templow > 1.) {                             // already sorted (minmax), so if this is the case we know we are fucked
-                object_warn((t_object *) x, "loop minimum cannot be greater than available buffer~ size, setting to buffer~ size minus vectorsize");
-                templow = 1. - bvsnorm;
-            }
-            if (temphigh > 1.) {
-                object_warn((t_object *) x, "loop maximum cannot be greater than available buffer~ size, setting to buffer~ size");
-                temphigh = 1.;
-            }
-            // finally check for minimum size ...
-            if ( (temphigh - templow) < bvsnorm ) {
-                object_warn((t_object *) x, "loop size (loop maximum minus loop minimum) cannot be this small, minimum is vectorsize internally (currently using %.0f samples)", x->vs);
-                if ( (templow - bvsnorm05) < 0. ) {
-                    templow = 0.;
-                    temphigh = bvsnorm;
-                } else if ( (temphigh + bvsnorm05) > 1. ) {
-                    temphigh = 1.;
-                    templow = 1. - bvsnorm;
-                } else {
-                    templow = templow - bvsnorm05;
-                    temphigh = temphigh + bvsnorm05;
-                }
-            }
-            templow     = CLAMP(templow, 0., 1.);
-            temphigh    = CLAMP(temphigh, 0., 1.);
-
-            // !! now we should update additional data for list outlet ??
-
-            // !! need to retain previous % start position if karma~ playing !!
-            
-            // regardless of input choice ('loop_points_flag'), final system is normalised 0..1 (phase)
-            x->startsel = templow * bframesm1;                  // !! (x->bframes - 1) here yes ?? ...
-            x->maxloop = x->endsel = temphigh * bframesm1;      // !! ...
-            //if (argc == 1) {                                  // always update these ?? <<-- raja had it only if (argc == 1)
-                karma_window(x, x->selection);
-                karma_start(x, x->startpos);
-            //}
-
+            // temp
             post("%s message: buffer~ %s", s->s_name, b->s_name);
-            post("loop start normalised %.2f, loop end normalised %.2f, units %s", templow, temphigh, *loop_points_sym);
             
-            //x->buf_temp = 0;                                  // should dspfree the temp buffer here ??
+            karma_buf_values_internal(x, templow, temphigh, loop_points_flag, callerid);
+
+            //x->buf_temp = 0;                          // should (dsp)free here and not earlier ??
 
         }
 
@@ -987,10 +1015,8 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
 void karma_buf_change(t_karma *x, t_symbol *s, short ac, t_atom *av)    // " set ..... "
 {
     t_atom      store_av[4];
-    t_symbol   *dummy;
     short       i, j, a;
-    dummy       = gensym("dummy");
-    a           = ac;
+    a         = ac;
 
     // if error return...
     
@@ -1022,7 +1048,7 @@ void karma_buf_change(t_karma *x, t_symbol *s, short ac, t_atom *av)    // " set
         }
         
         for (j = i; j < 4; j++) {
-            atom_setsym(store_av + j, dummy);
+            atom_setsym(store_av + j, ps_dummy);
         }
 
     }
@@ -1031,29 +1057,16 @@ void karma_buf_change(t_karma *x, t_symbol *s, short ac, t_atom *av)    // " set
 
 }
 
-// does not have to be defered ??
 // pete says: i know this branching is horrible, will rewrite soon...
 void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)   // " setloop ..... "
 {
-    t_symbol *loop_points_sym;
-    long loop_points_flag;                          // specify start/end loop points: 0 = in phase, 1 = in samples, 2 = in milliseconds (default)
-    double bframesm1, bframesms, bvsnorm, bvsnorm05;// bframesm1 not needed ?, bframesms is bollox ?
-    double templow, templowtemp, temphigh, temphightemp;
-/*
-    if (x->stopallowed == 0) {                      // these should only be (re)set here if karma~ NOT currently playing ??
-        x->directionorig = 0;
-        x->maxhead = x->playhead = 0.0;
-    } else {
-        x->maxhead = x->playhead;                   // !! we want a 'takeover' mode...
-    }
-    x->recordhead = -1;
-*/
-    bframesm1   = ((double)x->bframes - 1);
-    bframesms   = bframesm1 / x->bmsr * x->srscale;             // buffersize in milliseconds
-    bvsnorm     = x->vsnorm * (x->bsr / bframesm1);             // vectorsize in (double) % 0..1 phase units of buffer~
-    bvsnorm05   = bvsnorm * 0.5;                                // half vectorsize (normalised)
-    
-    loop_points_sym = gensym("ms");//NULL;     // !!
+    t_bool callerid = false;                // identify caller of 'karma_buf_values_internal'
+    t_symbol *loop_points_sym = 0;
+    long loop_points_flag;                  // specify start/end loop points: 0 = in phase, 1 = in samples, 2 = in milliseconds (default)
+    double templow, temphigh, temphightemp;
+
+    // !! if just "setloop" with no additional args...
+    // ...message will reset loop points to min / max !!
     loop_points_flag = 2;
     templow = -1.;
     temphigh = -1.;
@@ -1068,22 +1081,19 @@ void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)  
         
         if (atom_gettype(argv + 2) == A_SYM) {
             loop_points_sym = atom_getsym(argv + 2);
-            if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )    // phase 0..1
+            if ( (loop_points_sym == ps_phase) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )// phase
                 loop_points_flag = 0;
-            else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )                  // samples
+            else if ( (loop_points_sym == ps_samples) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )// samps
                 loop_points_flag = 1;
-            else {                                  // ms
+            else                                            // ms / anything
                 loop_points_flag = 2;
-                loop_points_sym = gensym("ms");     // !!
-            }
-        } else if (atom_gettype(argv + 2) == A_LONG) {  // can just be int
+        } else if (atom_gettype(argv + 2) == A_LONG) {      // can just be int
             loop_points_flag = atom_getlong(argv + 2);
-        } else if (atom_gettype(argv + 2) == A_FLOAT) { // convert if error float
+        } else if (atom_gettype(argv + 2) == A_FLOAT) {     // convert if error float
             loop_points_flag = (long)atom_getfloat(argv + 2);
         } else {
             object_warn((t_object *) x, "%s message does not understand arg no.3, using milliseconds for args 1 & 2", s->s_name);
-            loop_points_flag = 2;    // default ms
-            loop_points_sym = gensym("ms");     // !!
+            loop_points_flag = 2;                           // default ms
         }
         
         loop_points_flag = CLAMP(loop_points_flag, 0, 2);
@@ -1097,26 +1107,25 @@ void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)  
             if (temphigh < 0.) {
                 object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
                 //temphigh = 0.;
-            }   // !! do maximum check later !!
+            }   // !! do maximum check in karma_buf_values_internal !!
         } else if (atom_gettype(argv + 1) == A_LONG) {
-            temphigh = (double)atom_getlong(argv + 1);  // even if samples ??
+            temphigh = (double)atom_getlong(argv + 1);
             if (temphigh < 0.) {
                 object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
                 //temphigh = 0.;
-            }   // !! do maximum check later !!
+            }   // !! do maximum check in karma_buf_values_internal !!
         } else if ( (atom_gettype(argv + 1) == A_SYM) && (argc < 3) ) {
             //temphigh = -1.;
             loop_points_sym = atom_getsym(argv + 1);
-            if ( (loop_points_sym == gensym("phase")) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )              // phase 0..1
+            if ( (loop_points_sym == ps_phase) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )// phase
                 loop_points_flag = 0;
-            else if ( (loop_points_sym == gensym("samples")) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )                            // samples
+            else if ( (loop_points_sym == ps_samples) || (loop_points_sym == gensym("SAMPLES")) || (loop_points_sym == gensym("samps")) )// samps
                 loop_points_flag = 1;
-            else if ( (loop_points_sym == gensym("milliseconds")) || (loop_points_sym == gensym("MS")) || (loop_points_sym == gensym("ms")) )               // ms
+            else if ( (loop_points_sym == ps_milliseconds) || (loop_points_sym == gensym("MS")) || (loop_points_sym == gensym("ms")) )// ms
                 loop_points_flag = 2;
             else {
                 object_warn((t_object *) x, "%s message does not understand arg no.2, setting to milliseconds", s->s_name);
                 loop_points_flag = 2;
-                loop_points_sym = gensym("ms");     // !!
             }
         } else {
             //temphigh = -1.;
@@ -1127,7 +1136,6 @@ void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)  
     if (argc >= 1) {
         
         if (atom_gettype(argv + 0) == A_FLOAT) {
-            //if (temphigh <= 0.) {
             if (temphigh < 0.) {
                 temphightemp = temphigh;
                 temphigh = atom_getfloat(argv + 0);
@@ -1137,105 +1145,33 @@ void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)  
                 if (templow < 0.) {
                     object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
                     templow = 0.;
-                }   // !! do maximum check later !!
+                }   // !! do maximum check in karma_buf_values_internal !!
             }
         } else if (atom_gettype(argv + 0) == A_LONG) {
-            //if (temphigh <= 0.) {
             if (temphigh < 0.) {
                 temphightemp = temphigh;
-                temphigh = (double)atom_getlong(argv + 0);  // even if samples ??
+                temphigh = (double)atom_getlong(argv + 0);
                 templow = temphightemp;
             } else {
-                templow = (double)atom_getlong(argv + 0);   // even if samples ??
+                templow = (double)atom_getlong(argv + 0);
                 if (templow < 0.) {
                     object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
                     templow = 0.;
-                }   // !! do maximum check later !!
+                }   // !! do maximum check in karma_buf_values_internal !!
             }
         } else {
-            //temphigh = -1.;     // !! no - leave temphigh alone in case only arg #2 is an error
+            //temphigh = -1.;               // !! no - leave temphigh alone in case only arg #2 is an error
             //templow = -1.;
             object_warn((t_object *) x, "%s message does not understand arg no.1, resetting loop point", s->s_name);
         }
         
     }
-    
-    // by this stage in routine, if tempLOW < 0., it has not been set and should be set to default (0.) regardless of 'loop_points_flag'
-    if (templow < 0.)
-        templow = 0.;
-    
-    if (loop_points_flag == 0) {            // if PHASE
-        // by this stage in routine, if tempHIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
-        if (temphigh < 0.)
-            temphigh = 1.;                                      // already normalised 0..1
-        
-        // templow already treated as phase 0..1
-    } else if (loop_points_flag == 1) {     // if SAMPLES
-        // by this stage in routine, if tempHIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
-        if (temphigh < 0.)
-            temphigh = 1.;                                      // already normalised 0..1
-        else
-            temphigh = temphigh / bframesm1;                    // normalise samples high 0..1..
-        
-        if (templow > 0.)
-            templow = templow / bframesm1;                      // normalise samples low 0..1..
-    } else {                                // if MILLISECONDS (default)
-        // by this stage in routine, if tempHIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
-        if (temphigh < 0.)
-            temphigh = 1.;                                      // already normalised 0..1
-        else
-            temphigh = temphigh / bframesms;                    // normalise milliseconds high 0..1..
-        
-        if (templow > 0.)
-            templow = templow / bframesms;                      // normalise milliseconds low 0..1..
-    }
 
-    // !! treated as normalised 0..1 from here on ... min/max & check & clamp once normalisation has occurred
-    templowtemp = templow;
-    temphightemp = temphigh;
-    templow     = MIN(templowtemp, temphightemp);   // templow, temphigh = sort_double(templow, temphigh);
-    temphigh    = MAX(templowtemp, temphightemp);
-    if (templow > 1.) {                             // already sorted (minmax), so if this is the case we know we are fucked
-        object_warn((t_object *) x, "loop minimum cannot be greater than available buffer~ size, setting to buffer~ size minus vectorsize");
-        templow = 1. - bvsnorm;
-    }
-    if (temphigh > 1.) {
-        object_warn((t_object *) x, "loop maximum cannot be greater than available buffer~ size, setting to buffer~ size");
-        temphigh = 1.;
-    }
-    // finally check for minimum size ...
-    if ( (temphigh - templow) < bvsnorm ) {
-        object_warn((t_object *) x, "loop size (loop maximum minus loop minimum) cannot be this small, minimum is vectorsize internally (currently using %.0f samples)", x->vs);
-        if ( (templow - bvsnorm05) < 0. ) {
-            templow = 0.;
-            temphigh = bvsnorm;
-        } else if ( (temphigh + bvsnorm05) > 1. ) {
-            temphigh = 1.;
-            templow = 1. - bvsnorm;
-        } else {
-            templow = templow - bvsnorm05;
-            temphigh = temphigh + bvsnorm05;
-        }
-    }
-    templow     = CLAMP(templow, 0., 1.);
-    temphigh    = CLAMP(temphigh, 0., 1.);
-    
-    // !! now we should update additional data for list outlet ??
-    
-    // !! need to retain previous % start position if karma~ playing !!
-    
-    // regardless of input choice ('loop_points_flag'), final system is normalised 0..1 (phase)
-    x->startsel = templow * bframesm1;                  // !! (x->bframes - 1) here yes ?? ...
-    x->maxloop = x->endsel = temphigh * bframesm1;      // !! ...
-    // assume we are always changing when using "setloop" message (unless resetting "setloop" alone) ??
-    //if (argc == 0) {
-        karma_window(x, x->selection);
-        karma_start(x, x->startpos);
-    //}
-
+    // temp
     post("%s message:", s->s_name);
-    post("loop start normalised %.2f, loop end normalised %.2f, units %s", templow, temphigh, *loop_points_sym);
 
+    karma_buf_values_internal(x, templow, temphigh, loop_points_flag, callerid);
+    
 }
 
 void karma_setloop(t_karma *x, t_symbol *s, short ac, t_atom *av)   // " setloop ..... "
@@ -1245,7 +1181,7 @@ void karma_setloop(t_karma *x, t_symbol *s, short ac, t_atom *av)   // " setloop
 
 void karma_clock_list(t_karma *x)
 {
-    if (x->reportlist != 0)    // ('reportlist 0' == off, else milliseconds)
+    if (x->reportlist > 0)    // ('reportlist 0' == off, else milliseconds)
     {
         t_ptr_int frames = x->bframes - 1;
         t_ptr_int maxloop = x->maxloop;
@@ -1258,21 +1194,21 @@ void karma_clock_list(t_karma *x)
         
         double bmsr = x->bmsr;
         double playhead = x->playhead;
-        double xtlwin = x->selection;
+        double selection = x->selection;
         
-        t_atom datalist[7];                                                                                             // position float % 0..1
+        t_atom datalist[7];                                                                                 // position float % 0..1
         atom_setfloat(  datalist + 0,   CLAMP((directionorig < 0) ? ((playhead - (frames - maxloop)) / maxloop) : (playhead / maxloop), 0., 1.) );
-        atom_setlong(   datalist + 1,   go  );                                                                          // play flag int
-        atom_setlong(   datalist + 2,   record );                                                                          // record flag int
-        atom_setfloat(  datalist + 3, ((directionorig < 0) ? ((frames - maxloop) / bmsr) : 0.0)     );                  // start float ms
-        atom_setfloat(  datalist + 4, ((directionorig < 0) ? (frames / bmsr) : (maxloop / bmsr))    );                  // end float ms
-        atom_setfloat(  datalist + 5, ((xtlwin * maxloop) / bmsr)  );                                                   // window float ms
-        atom_setlong(   datalist + 6,   statehuman  );                                                                  // state flag int
+        atom_setlong(   datalist + 1,   go  );                                                              // play flag int
+        atom_setlong(   datalist + 2,   record );                                                           // record flag int
+        atom_setfloat(  datalist + 3, ((directionorig < 0) ? ((frames - maxloop) / bmsr) : 0.0)     );      // start float ms
+        atom_setfloat(  datalist + 4, ((directionorig < 0) ? (frames / bmsr) : (maxloop / bmsr))    );      // end float ms
+        atom_setfloat(  datalist + 5, ((selection * maxloop) / bmsr)  );                                    // window float ms
+        atom_setlong(   datalist + 6,   statehuman  );                                                      // state flag int
         
 //      outlet_list(x->messout, 0L, 7, &datalist);
         outlet_list(x->messout, gensym("list"), 7, datalist);   // !! &datalist ??
 
-        if (sys_getdspstate() && (x->reportlist > 0)) {
+        if (sys_getdspstate() && (x->reportlist > 0)) {         // '&& (x->reportlist > 0)' ??
             clock_delay(x->tclock, x->reportlist);
         }
     }
@@ -1341,7 +1277,7 @@ void karma_start(t_karma *x, double positionstart)   // positionstart = "positio
     if (!x->looprecord)
     {
         if (x->directionorig < 0) {
-            x->startsel = CLAMP( ((x->bframes - 1) - x->maxloop) + (x->startpos * x->maxloop), (x->bframes - 1) - x->maxloop, x->bframes - 1);
+            x->startsel = CLAMP( ((x->bframes - 1) - x->maxloop) + (x->startpos * x->maxloop), (x->bframes - 1) - x->maxloop, x->bframes - 1 );
             x->endsel = x->startsel + (x->selection * x->maxloop);
             if (x->endsel > (x->bframes - 1)) {
                 x->endsel = ((x->bframes - 1) - x->maxloop) + (x->endsel - (x->bframes - 1));
@@ -1350,7 +1286,7 @@ void karma_start(t_karma *x, double positionstart)   // positionstart = "positio
                 x->wrapflag = 0;
             }
         } else {
-            x->startsel = CLAMP(positionstart * x->maxloop, 0.0, x->maxloop);
+            x->startsel = CLAMP( positionstart * x->maxloop, 0.0, x->maxloop );
             x->endsel = x->startsel + (x->selection * x->maxloop);
             if (x->endsel > x->maxloop) {
                 x->endsel = x->endsel - x->maxloop;
@@ -1366,9 +1302,12 @@ void karma_start(t_karma *x, double positionstart)   // positionstart = "positio
 void karma_window(t_karma *x, double duration)   // duration = "window" float message
 {
     t_ptr_int maxloop = x->maxloop;
+    double minsamps, minsampsnorm;  // temp...
+    minsamps = 4.0;                 // ...
+    minsampsnorm = minsamps / x->sr;// ...
     
     if (!x->looprecord) {
-        x->selection = (duration < 0.001) ? 0.001 : duration;   // !! fix - this minimum should be in meaningful values, not % 0..1 phase !!
+        x->selection = (duration < minsampsnorm) ? minsampsnorm : duration;   // !! fix - this not quite right :-) !!
         if (x->directionorig < 0) {
             x->endsel = x->startsel + (x->selection * maxloop);
             if (x->endsel > (x->bframes - 1)) {
@@ -1387,7 +1326,7 @@ void karma_window(t_karma *x, double duration)   // duration = "window" float me
             }
         }
     } else {
-        x->selection = (duration < 0.001) ? 0.001 : duration;   // !! fix - this minimum should be in meaningful values, not % 0..1 phase !!
+        x->selection = (duration < minsampsnorm) ? minsampsnorm : duration;   // !! fix - this not quite right :-) !!
     }
 }
 
@@ -1418,43 +1357,39 @@ void karma_play(t_karma *x)
     x->statehuman = 1;
     x->stopallowed = 1;
 }
-/*
-By the way, it looks like in that 'karma_record' method, i didn't actually need to dereference. I could've cut this line out:
-r = x->rec; g = x->go; rt = x->rectoo; ap = x->append; fr = x->recordinit; sc = x->statecontrol;
-Since that message doesn't operate in a timing-critical thread like the perform methods do, you could actually just use and set the struct versions of those variables directly, for a small example: if (x->rec) { if (x->rectoo) x->statecontrol = 2; else x->statecontrol = 3; }.....
-*/
+
 void karma_record(t_karma *x)
 {
     float *b;
     long i;
     char sc, sh;
-    t_bool r, g, rt, ap, fr;
-    t_ptr_int nc;
-    t_ptr_int frms;
+    t_bool record, go, recalt, append, init;
+    t_ptr_int bchans, bframes;
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
-    r = x->record;
-    g = x->go;
-    rt = x->recordalt;
-    ap = x->append;
-    fr = x->recordinit;
+
+    record = x->record;
+    go = x->go;
+    recalt = x->recordalt;
+    append = x->append;
+    init = x->recordinit;
     sc = x->statecontrol;
     sh = x->statehuman;     // !! fix: overdub display !! *
-
+    
     x->stopallowed = 1;
-
-    if (r) {
-        if (rt) {
+    
+    if (record) {
+        if (recalt) {
             sc = 2;
-            sh = 3; // ?? *
+            sh = 3;         // ?? *
         } else {
             sc = 3;
             sh = 2;
         }
     } else {
-        if (ap) {
-            if (g) {
-                if (rt) {
+        if (append) {
+            if (go) {
+                if (recalt) {
                     sc = 2;
                     sh = 3; // ?? *
                 } else {
@@ -1466,23 +1401,23 @@ void karma_record(t_karma *x)
                 sh = 5;
             }
         } else {
-            if (!g) {
-                fr = 1;
+            if (!go) {
+                init = 1;
                 if (buf) {
-                    nc = x->bchans;
-                    frms = x->bframes;
+                    bchans = x->bchans;
+                    bframes = x->bframes;
                     b = buffer_locksamples(buf);
                     if (!b)
                         goto zero;
                     
-                    for (i = 0; i < frms; i++) {
-                        if (nc > 1) {
-                            b[i * nc] = 0.0;
-                            b[(i * nc) + 1] = 0.0;
-                            if (nc > 2) {
-                                b[(i * nc) + 2] = 0.0;
-                                if (nc > 3) {
-                                    b[(i * nc) + 3] = 0.0;
+                    for (i = 0; i < bframes; i++) {
+                        if (bchans > 1) {
+                            b[i * bchans] = 0.0;
+                            b[(i * bchans) + 1] = 0.0;
+                            if (bchans > 2) {
+                                b[(i * bchans) + 2] = 0.0;
+                                if (bchans > 3) {
+                                    b[(i * bchans) + 3] = 0.0;
                                 }
                             }
                         } else {
@@ -1502,16 +1437,103 @@ void karma_record(t_karma *x)
         }
     }
     
-    g = 1;
-    x->go = g;
-    x->recordinit = fr;
+    go = 1;
+    x->go = go;
+    x->recordinit = init;
     x->statecontrol = sc;
     x->statehuman = sh;
     
 zero:
     return;
 }
+/*
+void karma_record(t_karma *x)
+{
+    float *b;
+    long i;
+    char sc, sh;
+    t_bool g, recordinit, stopallowed;
+    t_ptr_int bchans, bframes;
+    
+    t_buffer_obj *buf = buffer_ref_getobject(x->buf);
 
+    recordinit = x->recordinit;
+    sc = x->statecontrol;
+    sh = x->statehuman;     // !! fix: overdub display !! *
+    g = 1;
+
+    stopallowed = x->stopallowed;
+    x->stopallowed = 1;
+
+    if (x->record) {
+        if (x->recordalt) {
+            sc = 2;
+            sh = 3;         // ?? *
+        } else {
+            sc = 3;
+            sh = 2;
+        }
+    } else {
+        if (x->append) {
+            if (x->go) {
+                if (x->recordalt) {
+                    sc = 2;
+                    sh = 3; // ?? *
+                } else {
+                    sc = 10;
+                    sh = 4;
+                }
+            } else {
+                sc = 1;
+                sh = 5;
+            }
+        } else {
+            if (!x->go) {
+                recordinit = 1;
+                if (buf) {
+                    bchans = x->bchans;
+                    bframes = x->bframes;
+                    b = buffer_locksamples(buf);
+                    if (!b)
+                        x->stopallowed = stopallowed;   // ??
+                        goto zero;
+                    // !! should this happen defered ??
+                    for (i = 0; i < bframes; i++) {
+                        if (bchans > 1) {
+                            b[i * bchans] = 0.0;
+                            b[(i * bchans) + 1] = 0.0;
+                            if (bchans > 2) {
+                                b[(i * bchans) + 2] = 0.0;
+                                if (bchans > 3) {
+                                    b[(i * bchans) + 3] = 0.0;
+                                }
+                            }
+                        } else {
+                            b[i] = 0.0;
+                        }
+                    }
+                    
+                    buffer_setdirty(buf);
+                    buffer_unlocksamples(buf);
+                }
+                sc = 1;
+                sh = 5;
+            } else {
+                sc = 11;
+                sh = 2;
+            }
+        }
+    }
+    
+    x->statecontrol = sc;
+    x->recordinit = recordinit;
+    x->go = g;
+    x->statehuman = sh;
+
+zero:
+    return;
+}
+*/
 void karma_append(t_karma *x)
 {
     if (x->recordinit) {
@@ -1534,26 +1556,26 @@ void karma_overdub(t_karma *x, double amplitude)
     x->overdubamp = CLAMP(amplitude, 0.0, 1.0); // clamp overzealous ??
 }
 /*
-void karma_jump(t_karma *x, double j)
+void karma_jump(t_karma *x, double jumpposition)
 {
     if (x->initinit) {
-        if ((x->looprecord) && (!x->record)) {        // if (!((x->looprecord) && (!x->record))) ...
+        if ((x->looprecord) && (!x->record)) {  // if (!((x->looprecord) && (!x->record))) ...
                                                 // ... ?? ...
         } else {
             x->statecontrol = 8;
-            x->jumphead = j;
+            x->jumphead = jumpposition;
 //          x->statehuman = 1;                  // NO ?? ...
             x->stopallowed = 1;
         }
     }
 }
 */
-void karma_jump(t_karma *x, double j)
+void karma_jump(t_karma *x, double jumpposition)
 {
     if (x->initinit) {
         if (!((x->looprecord) && (!x->record))) {
             x->statecontrol = 8;
-            x->jumphead = j;
+            x->jumphead = jumpposition;
 //          x->statehuman = 1;                  // NO ?? ...
             x->stopallowed = 1;
         }
@@ -1563,9 +1585,17 @@ void karma_jump(t_karma *x, double j)
 t_max_err karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat)
 {
     if (msg == ps_buffer_modified)
-        x->buf_modified = 1;
+        x->buf_modified = true;
     
     return buffer_ref_notify(x->buf, s, msg, sndr, dat);
+}
+
+t_max_err karma_buf_not_temp(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat)
+{
+    if (msg == ps_buffer_modified)
+        x->buf_mod_temp = true;
+    
+    return buffer_ref_notify(x->buf_temp, s, msg, sndr, dat);
 }
 
 void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long vecount, long flags)
@@ -1577,7 +1607,7 @@ void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long v
     
     if (x->bufname != 0) {
         if (!x->initinit)
-            karma_buf_setup(x, x->bufname);
+            karma_buf_setup(x, x->bufname);     // !! this should be defered ??
         if (x->chans > 1) {
             if (x->chans > 2) {
                 object_method(dsp64, gensym("dsp_add64"), x, karma_quad_perform, 0, NULL);
@@ -1597,9 +1627,9 @@ void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long v
             karma_window(x, x->selection);
             karma_start(x, x->startpos);
         }
-    } else {
+/*  } else {
         object_error((t_object *)x, "fails without buffer~ name!");
-    }
+*/  }
 }
 
 
@@ -1632,8 +1662,8 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
     float *b = buffer_locksamples(buf);
     
-    record             = x->record;
-    recordprev          = x->recordprev;
+    record          = x->record;
+    recordprev      = x->recordprev;
     dirt            = 0;
     if (!b || x->ob.z_disabled)
         goto zero;
@@ -1641,7 +1671,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
         dirt        = 1;
     if (x->buf_modified) {
         karma_buf_modset(x, buf);
-        x->buf_modified  = 0;
+        x->buf_modified  = false;
     }
     
     o1prev          = x->o1prev;
@@ -1653,7 +1683,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     playfadeflag    = x->playfadeflag;
     recfadeflag     = x->recfadeflag;
     rpre            = x->recordhead;
-    recordalt          = x->recordalt;
+    recordalt       = x->recordalt;
     nchan           = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
@@ -1664,7 +1694,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     directionprev   = x->directionprev;
     maxloop         = x->maxloop;
     xwin            = x->selection;
-    looprecord         = x->looprecord;
+    looprecord      = x->looprecord;
     startsel        = x->startsel;
     startpos        = x->startpos;
     endsel          = x->endsel;
@@ -1674,7 +1704,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     ovdbdif         = (overdubamp != overdubprev) ? ((overdubprev - overdubamp) / n) : 0.0;
     recordfade      = x->recordfade;
     playfade        = x->playfade;
-    accuratehead            = x->playhead;
+    accuratehead    = x->playhead;
     playhead        = trunc(accuratehead);
     maxhead         = x->maxhead;
     wrapflag        = x->wrapflag;
@@ -2605,19 +2635,19 @@ apned:
     x->directionorig    = directionorig;
     x->directionprev    = directionprev;
     x->recordhead       = rpre;
-    x->recordalt           = recordalt;
+    x->recordalt        = recordalt;
     x->recordfade       = recordfade;
     x->triginit         = triginit;
     x->jumpflag         = jumpflag;
     x->go               = go;
-    x->record              = record;
-    x->recordprev           = recordprev;
+    x->record           = record;
+    x->recordprev       = recordprev;
     x->statecontrol     = statecontrol;
     x->playfadeflag     = playfadeflag;
     x->recfadeflag      = recfadeflag;
     x->playfade         = playfade;
     x->maxloop          = maxloop;
-    x->looprecord          = looprecord;
+    x->looprecord       = looprecord;
     x->startsel         = startsel;
     x->endsel           = endsel;
     x->overdubprev      = overdubamp;
@@ -2662,8 +2692,8 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
     float *b = buffer_locksamples(buf);
     
-    record             = x->record;
-    recordprev          = x->recordprev;
+    record          = x->record;
+    recordprev      = x->recordprev;
     dirt            = 0;
     if (!b || x->ob.z_disabled)
         goto zero;
@@ -2671,7 +2701,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
         dirt        = 1;
     if (x->buf_modified) {
         karma_buf_modset(x, buf);
-        x->buf_modified  = 0;
+        x->buf_modified  = false;
     }
     
     o1prev          = x->o1prev;
@@ -2686,7 +2716,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     playfadeflag    = x->playfadeflag;
     recfadeflag     = x->recfadeflag;
     rpre            = x->recordhead;
-    recordalt          = x->recordalt;
+    recordalt       = x->recordalt;
     nchan           = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
@@ -2697,7 +2727,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     directionprev   = x->directionprev;
     maxloop         = x->maxloop;
     xwin            = x->selection;
-    looprecord         = x->looprecord;
+    looprecord      = x->looprecord;
     startsel        = x->startsel;
     startpos        = x->startpos;
     endsel          = x->endsel;
@@ -2707,7 +2737,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     ovdbdif         = (overdubamp != overdubprev) ? ((overdubprev - overdubamp) / n) : 0.0;
     recordfade      = x->recordfade;
     playfade        = x->playfade;
-    accuratehead            = x->playhead;
+    accuratehead    = x->playhead;
     playhead        = trunc(accuratehead);
     maxhead         = x->maxhead;
     wrapflag        = x->wrapflag;
@@ -4544,19 +4574,19 @@ apnde:
     x->directionorig    = directionorig;
     x->directionprev    = directionprev;
     x->recordhead       = rpre;
-    x->recordalt           = recordalt;
+    x->recordalt        = recordalt;
     x->recordfade       = recordfade;
     x->triginit         = triginit;
     x->jumpflag         = jumpflag;
     x->go               = go;
-    x->record              = record;
-    x->recordprev           = recordprev;
+    x->record           = record;
+    x->recordprev       = recordprev;
     x->statecontrol     = statecontrol;
     x->playfadeflag     = playfadeflag;
     x->recfadeflag      = recfadeflag;
     x->playfade         = playfade;
     x->maxloop          = maxloop;
-    x->looprecord          = looprecord;
+    x->looprecord       = looprecord;
     x->startsel         = startsel;
     x->endsel           = endsel;
     x->overdubprev      = overdubamp;
@@ -4607,8 +4637,8 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
     float *b = buffer_locksamples(buf);
     
-    record             = x->record;
-    recordprev          = x->recordprev;
+    record          = x->record;
+    recordprev      = x->recordprev;
     dirt            = 0;
     if (!b || x->ob.z_disabled)
         goto zero;
@@ -4616,7 +4646,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
         dirt        = 1;
     if (x->buf_modified) {
         karma_buf_modset(x, buf);
-        x->buf_modified  = 0;
+        x->buf_modified  = false;
     }
 
     o1prev          = x->o1prev;
@@ -4637,7 +4667,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     playfadeflag    = x->playfadeflag;
     recfadeflag     = x->recfadeflag;
     rpre            = x->recordhead;
-    recordalt          = x->recordalt;
+    recordalt       = x->recordalt;
     nchan           = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
@@ -4648,7 +4678,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     directionprev   = x->directionprev;
     maxloop         = x->maxloop;
     xwin            = x->selection;
-    looprecord         = x->looprecord;
+    looprecord      = x->looprecord;
     startsel        = x->startsel;
     startpos        = x->startpos;
     endsel          = x->endsel;
@@ -4658,7 +4688,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     ovdbdif         = (overdubamp != overdubprev) ? ((overdubprev - overdubamp) / n) : 0.0;
     recordfade      = x->recordfade;
     playfade        = x->playfade;
-    accuratehead            = x->playhead;
+    accuratehead    = x->playhead;
     playhead        = trunc(accuratehead);
     maxhead         = x->maxhead;
     wrapflag        = x->wrapflag;
@@ -8527,19 +8557,19 @@ apnde:
     x->directionorig    = directionorig;
     x->directionprev    = directionprev;
     x->recordhead       = rpre;
-    x->recordalt           = recordalt;
+    x->recordalt        = recordalt;
     x->recordfade       = recordfade;
     x->triginit         = triginit;
     x->jumpflag         = jumpflag;
     x->go               = go;
-    x->record              = record;
-    x->recordprev           = recordprev;
+    x->record           = record;
+    x->recordprev       = recordprev;
     x->statecontrol     = statecontrol;
     x->playfadeflag     = playfadeflag;
     x->recfadeflag      = recfadeflag;
     x->playfade         = playfade;
     x->maxloop          = maxloop;
-    x->looprecord          = looprecord;
+    x->looprecord       = looprecord;
     x->startsel         = startsel;
     x->endsel           = endsel;
     x->overdubprev      = overdubamp;
