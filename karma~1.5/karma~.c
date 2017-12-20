@@ -51,15 +51,15 @@
 
 //  //  //  TODO version 1.5:
 //  //  //  fix: a bunch of bugs & stuff, incl. ...
-//  //  //  - all buffer 'set' etc bugs
-//  //  //  - statemachine ('statehuman') (incl. overdub notify bug)
+//  //  //  - 'startloop' not working because of "position" tie-in, rewrite 'karma_start' method (also affects buffer 'set' & 'setloop' etc bugs)
+//  //  //  - 'statehuman' (statemachine) output (including the overdub notify bug)
 
 //  //  //  TODO version 2.0:
 //  //  //  rewrite, take multiple perform routines out and put
 //  //  //  interpolation routines and ipoke out into seperate files
 //  //  //  then will be able to integrate 'rubberband' and add better ipoke interpolations etc
 //  //  //  also look into raja's new 'crossfade' ideas as an optional alternative to 'switch & ramp'
-//  //  //  and possibly do seperate externals for different elements (e.g. karma~, karmaplay~, karmapoke~, karmaphase~, etc)
+//  //  //  and possibly do seperate externals for different elements (e.g. karmaplay~, karmapoke~, karmaphase~, ...)
 
 
 #include "stdlib.h"
@@ -88,9 +88,9 @@ typedef struct _karma {
     
     t_pxobject       ob;
     t_buffer_ref    *buf;
-    t_buffer_ref    *buf_temp;
+    t_buffer_ref    *buf_temp;      // so that 'set' errors etc do not interupt current buf playback ...
     t_symbol        *bufname;
-    t_symbol        *bufname_temp;
+    t_symbol        *bufname_temp;  // ...
 
     double  sr;             // system samplerate
     double  bsr;            // buffer samplerate
@@ -114,33 +114,34 @@ typedef struct _karma {
 
     double  playhead;       // play head position in samples (double so that "capable of tracking playhead position in floating-point indices")
     double  maxhead;        // maximum playhead position that the recording has gone into the buffer~ in samples  // ditto
-    double  jumphead;       // jump position (in terms of phase 0..1 of loop) <<-- of 'loop', not 'buffer~' ??
-    double  selection;      // selection length of window within loop set by 'window $1' message sent to object (in phase 0..1 ??)
-    double  startpos;       // start position where to start playing set by the 'position $1' message sent to object (in phase 0..1 ??)
+    double  jumphead;       // jump position (in terms of phase 0..1 of loop) <<-- of 'loop', not 'buffer~'
+    double  selection;      // selection length of window ('selection') within loop set by 'window $1' message sent to object (in phase 0..1)
+    double  selstart;       // start position of window ('selection') within loop set by the 'position $1' message sent to object (in phase 0..1)
     double  snrfade;        // fade counter for switch n ramp, normalised 0..1 ??
     double  overdubamp;     // overdub amplitude 0..1 set by 'overdub $1' message sent to object
     double  overdubprev;    // a 'current' overdub amount ("for smoothing overdub amp changes")
 
     long    syncoutlet;     // make sync outlet ? (object arg #3: 0/1 flag) <<-- TODO: switch to private @ttribute instead
-    //long  boffset;        // zero indexed buffer channel # (default 0), user settable, not buffer~ queried -->> TODO
+//  long    boffset;        // zero indexed buffer channel # (default 0), user settable, not buffer~ queried -->> TODO
+//  long    moduloout;      // modulo playback channel outputs flag, user settable, not buffer~ queried -->> TODO
+    long    islooped;       // can disable/enable global looping status (rodrigo @ttribute request, TODO) (!! long ??)
 
     t_ptr_int   bframes;    // # of buffer frames (stereo has 2 samples per frame, etc.)
     t_ptr_int   bchans;     // number of buffer channels
     t_ptr_int   chans;      // number of audio channels choice (object arg #2: 1 / 2 / 4)
 
-    t_ptr_int   interpflag; // playback interpolation, 0 = linear, 1 = cubic, 2 = spline
-    t_ptr_int   islooped;   // can disable/enable global looping status (rodrigo @ttribute request, TODO)
+    t_ptr_int   interpflag; // playback interpolation, 0 = linear, 1 = cubic, 2 = spline (!! why is this a t_ptr_int ??)
     t_ptr_int   recordhead; // record head position in samples
     t_ptr_int   maxloop;    // the overall loop recorded so far (in samples)
-    t_ptr_int   startsel;   // start position of 'window' selection in samples
-    t_ptr_int   endsel;     // end position of 'window' selection in samples
-    t_ptr_int   pokesteps;  // number of steps to keep track of in ipoke~ linear averaging scheme
+    t_ptr_int   startloop;  // start position (in buffer~) of recorded loop in samples
+    t_ptr_int   endloop;    // end position (in buffer~) of recorded loop in samples
+    t_ptr_int   pokesteps;  // number of steps (samples) to keep track of in ipoke~ linear averaging scheme
     t_ptr_int   recordfade; // fade counter for recording in samples
     t_ptr_int   playfade;   // fade counter for playback in samples
     t_ptr_int   globalramp; // general fade time (for both recording and playback) in samples
     t_ptr_int   snrramp;    // switch n ramp time in samples ("generally much shorter than general fade time")
-    t_ptr_int   snrtype;    // switch n ramp curve option choice (why is this a t_ptr_int ?)
-    t_ptr_int   reportlist; // right list outlet report granularity in ms (why is this a t_ptr_int ?)
+    t_ptr_int   snrtype;    // switch n ramp curve option choice (!! why is this a t_ptr_int ??)
+    t_ptr_int   reportlist; // right list outlet report granularity in ms (!! why is this a t_ptr_int ??)
     
     char    statecontrol;   // master looper state control (not 'human state')
     char    statehuman;     // master looper state human logic (not 'statecontrol') (0=stop, 1=play, 2=record, 3=overdub, 4=append 5=initial)
@@ -149,14 +150,15 @@ typedef struct _karma {
     char    recfadeflag;    // record up/down flag, 0 = fade up/in, 1 = fade down/out <<-- TODO: reverse !!
     char    recendmark;     // the flag to show that the loop is done recording and to mark the ending of it
     char    directionorig;  // original direction loop was initially recorded (if loop was initially recorded in reverse started from end-of-buffer etc)
-    char    directionprev;  // previous direction (sample for directional changes to mark where fades need to happen during recording)
+    char    directionprev;  // previous direction (marker for directional changes to place where fades need to happen during recording)
     
+//  t_bool  startoveride;   // overide karma_start if called from 'karma_buf_values_internal'
     t_bool  stopallowed;    // flag, '0' if already stopped once (& init)
     t_bool  go;             // execute play ??
     t_bool  record;         // record flag
     t_bool  recordprev;     // previous record flag
     t_bool  looprecord;     // flag: "...for when object is in a recording stage that actually determines loop duration..."
-    t_bool  recordalt;      // ("rectoo") ARGH ?? !! flag that selects between different types of recording for statecontrol ??
+    t_bool  recordalt;      // ("rectoo") ARGH ?? !! flag that selects between different types of recording for statecontrol (but what?!) ??
     t_bool  append;         // append flag ??
     t_bool  triginit;       // flag to show trigger start of initial-loop creation (?)
     t_bool  wrapflag;       // flag to show if a loop wraps around the buffer~ end / beginning
@@ -183,6 +185,7 @@ void        karma_stop(t_karma *x);
 void        karma_play(t_karma *x);
 void        karma_record(t_karma *x);
 void        karma_start(t_karma *x, double positionstart);
+//void      karma_start_overide(t_karma *x, double endloop);
 
 t_max_err   karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat);
 t_max_err   karma_buf_not_temp(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat);
@@ -513,11 +516,16 @@ void ext_main(void *r)
     CLASS_ATTR_LABEL(c, "interp", 0, "Playback Interpolation");
     // @description Type of <b>interpolation</b> used in audio playback. Default <b>Cubic</b> <br />
     
-    CLASS_ATTR_LONG(c, "loop", 0, t_karma, islooped);
+    CLASS_ATTR_LONG(c, "loop", 0, t_karma, islooped);           // !! TODO !!
     CLASS_ATTR_FILTER_CLIP(c, "loop", 0, 1);
     CLASS_ATTR_LABEL(c, "loop", 0, "Loop off / on");
     // @description Set as <m>integer</m> flag <b>0</b> or <b>1</b>. With <m>loop</m> switched on, <o>karma~</o> acts as a nornal looper, looping playback and/or recording depending on the state machine. With <m>loop</m> switched off, <o>karma~</o> will only play or record in oneshots. Default <b>On (1)</b> <br />
-
+/*
+    CLASS_ATTR_LONG(c, "modout", 0, t_karma, moduloout);        // !! TODO !!
+    CLASS_ATTR_FILTER_CLIP(c, "modout", 0, 1);
+    CLASS_ATTR_LABEL(c, "modout", 0, "Modulo playback channel outputs off / on");
+    // @description Set as <m>integer</m> flag <b>0</b> or <b>1</b>. With <m>modout</m> switched on, <o>karma~</o> will fill all output channels with audio even if the <o>buffer~</o> (or <o>buffer~</o> as a result of <m>offset</m>) has less available channels. With <m>modout</m> switched off, <o>karma~</o> will silence any unused channels. Like the same message to the <o>sfplay~</o> object. Default <b>Off (0)</b> <br />
+*/
     class_dspinit(c);
     class_register(CLASS_BOX, c);
     karma_class = c;
@@ -528,7 +536,7 @@ void ext_main(void *r)
     
     ps_phase = gensym("phase");
     ps_samples = gensym("samples");
-    ps_milliseconds = gensym("milliseconds");
+    ps_milliseconds = gensym("milliseconds");   // !! should be "ms" eventually
 
     // identify build
     post("-- karma~:");
@@ -594,7 +602,7 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
         x->directionprev = x->directionorig = x->recordprev = x->record = x->recordalt = x->recendmark = x->go = x->triginit = 0;
         x->pokesteps = x->writeval1 = x->writeval2 = x->writeval3 = x->writeval4 = x->wrapflag = x->looprecord = 0;
         x->maxhead = x->playhead = 0.0;
-        x->startpos = x->jumphead = x->snrfade = x->o1dif = x->o2dif = x->o3dif = x->o4dif = x->o1prev = x->o2prev = x->o3prev = x->o4prev = 0.0;
+        x->selstart = x->jumphead = x->snrfade = x->o1dif = x->o2dif = x->o3dif = x->o4dif = x->o1prev = x->o2prev = x->o3prev = x->o4prev = 0.0;
         
         if (bufname != 0)
             x->bufname = bufname;
@@ -662,6 +670,7 @@ void karma_buf_dblclick(t_karma *x)
     buffer_view(buffer_ref_getobject(x->buf));
 }
 
+// called in 'karma_dsp64' method
 void karma_buf_setup(t_karma *x, t_symbol *s)
 {
     t_buffer_obj *buf;
@@ -680,24 +689,27 @@ void karma_buf_setup(t_karma *x, t_symbol *s)
     } else {
 */  if (buf != NULL) {
         x->directionorig = 0;
-        x->maxhead = x->playhead = 0.0;
-        x->recordhead = -1;
-        x->bchans = buffer_getchannelcount(buf);
-        x->bframes = buffer_getframecount(buf);
-        x->bmsr = buffer_getmillisamplerate(buf);
-        x->bsr = buffer_getsamplerate(buf);
-        x->srscale = x->bsr / x->sr;
-        x->startpos = 0.0;
-        x->selection = 1.0;
-        x->maxloop = x->endsel = x->bframes - 1;
+        x->maxhead = x->playhead    = 0.0;
+        x->recordhead               = -1;
+        x->bchans   = buffer_getchannelcount(buf);
+        x->bframes  = buffer_getframecount(buf);
+        x->bmsr     = buffer_getmillisamplerate(buf);
+        x->bsr      = buffer_getsamplerate(buf);
+        x->srscale                  = x->bsr / x->sr;
+        x->selstart = x->startloop  = 0.0;    // !! ??
+        x->selection                = 1.0;
+        x->maxloop = x->endloop     = (x->bframes - 1);
+        //x->startoveride           = false;
+
     }
 }
 
+// called on buffer modified notification
 void karma_buf_modset(t_karma *x, t_buffer_obj *b)
 {
-    double bsr, bmsr;
-    t_ptr_int chans;
-    t_ptr_int frames;
+    double      bsr, bmsr;
+    t_ptr_int   chans;
+    t_ptr_int   frames;
     
     if (b) {
         bsr     = buffer_getsamplerate(b);
@@ -706,15 +718,19 @@ void karma_buf_modset(t_karma *x, t_buffer_obj *b)
         bmsr    = buffer_getmillisamplerate(b);
         
         if (((x->bchans != chans) || (x->bframes != frames)) || (x->bmsr != bmsr)) {
-            x->bmsr = bmsr;
-            x->bsr = bsr;
-            x->srscale = bsr / x->sr;
-            x->bframes = frames;
-            x->bchans = chans;
-            x->startsel = 0.0;
-            x->maxloop = x->endsel = x->bframes - 1;
+            x->bmsr                 = bmsr;
+            x->bsr                  = bsr;
+            x->srscale              = bsr / x->sr;
+            x->bframes              = frames;
+            x->bchans               = chans;
+            x->startloop            = 0.;   // !!
+            x->maxloop = x->endloop = (x->bframes - 1);
+
+            //x->startoveride       = false;
             karma_window(x, x->selection);
-            karma_start(x, x->startpos);
+            karma_start(x, x->selstart);
+            
+            post("modset called");  // temp
         }
     }
 }
@@ -789,7 +805,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
         high = 1.;
     }
 
-    // finally check for minimum loop points size ...
+    // finally check for minimum loop-size ...
     if ( (high - low) < bvsnorm ) {
         object_warn((t_object *) x, "loop size cannot be this small, minimum is vectorsize internally (currently using %.0f samples)", x->vs);
         if ( (low - bvsnorm05) < 0. ) {
@@ -810,16 +826,19 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
     
     // regardless of input choice ('loop_points_flag'), final system is normalised 0..1 (phase)
 
-    x->startsel = low * bframesm1;
-    x->maxloop = x->endsel = high * bframesm1;
+    x->startloop = low * bframesm1;
+    x->maxloop = x->endloop = high * bframesm1;
     
     // update
+    //x->startoveride = true;
     karma_window(x, x->selection);
-    karma_start(x, x->startpos);
+    karma_start(x, x->selstart);
+    //karma_start_overide(x, x->endloop);
     
     // temp
     loop_points_sym = (loop_points_flag > 1) ? ps_milliseconds : ((loop_points_flag < 1) ? ps_phase : ps_samples);
     post("loop start normalised %.2f, loop end normalised %.2f, units %s", low, high, *loop_points_sym);
+    //post("loop start samples %.2f, loop end samples %.2f, units used %s", (low * bframesm1), (high * bframesm1), *loop_points_sym);
 
 }
 
@@ -827,7 +846,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
 // pete says: i know this branching is horrible, will rewrite soon...
 void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)   // " set ..... "
 {
-    t_bool callerid = true;             // identify caller of 'karma_buf_values_internal'
+    t_bool callerid;
     t_buffer_obj *buf_temp;
     t_symbol *b;
     t_symbol *b_temp = 0;
@@ -867,6 +886,7 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
         } else {
             
             x->buf_temp = 0;            // should dspfree the temp buffer here ??
+            callerid = true;            // identify caller of 'karma_buf_values_internal'
             
             b  = atom_getsym(argv + 0); // already arg checked
 
@@ -1041,7 +1061,7 @@ void karma_buf_change(t_karma *x, t_symbol *s, short ac, t_atom *av)    // " set
             store_av[i] = av[i];
         }
 
-    } else {
+    } else {                        // this is a shame, how do i pass a t_atom without knowing # of items ?
         
         for (i = 0; i < a; i++) {
             store_av[i] = av[i];
@@ -1057,6 +1077,7 @@ void karma_buf_change(t_karma *x, t_symbol *s, short ac, t_atom *av)    // " set
 
 }
 
+// karma_setloop method defered
 // pete says: i know this branching is horrible, will rewrite soon...
 void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)   // " setloop ..... "
 {
@@ -1270,26 +1291,89 @@ void karma_assist(t_karma *x, void *b, long m, long a, char *s)
 
 //  //  //
 
+// !! pete: i do not like the name "start" - surely it should be "karma_start_point" or "karma_selection_start" ??
 void karma_start(t_karma *x, double positionstart)   // positionstart = "position" float message
 {
-    x->startpos = positionstart;
+    x->selstart = positionstart;
     
+    // !! BUG :: 'x->startloop' is reassigned here, but if 'karma_start' is called by...
+    // ...'karma_buf_values_internal()' this totally fucks up the new 'low' loop point !!
     if (!x->looprecord)
     {
         if (x->directionorig < 0) {
-            x->startsel = CLAMP( ((x->bframes - 1) - x->maxloop) + (x->startpos * x->maxloop), (x->bframes - 1) - x->maxloop, x->bframes - 1 );
-            x->endsel = x->startsel + (x->selection * x->maxloop);
-            if (x->endsel > (x->bframes - 1)) {
-                x->endsel = ((x->bframes - 1) - x->maxloop) + (x->endsel - (x->bframes - 1));
+            x->startloop = CLAMP( ((x->bframes - 1) - x->maxloop) + (x->selstart * x->maxloop), (x->bframes - 1) - x->maxloop, (x->bframes - 1) );
+            x->endloop = x->startloop + (x->selection * x->maxloop);
+            if (x->endloop > (x->bframes - 1)) {
+                x->endloop = ((x->bframes - 1) - x->maxloop) + (x->endloop - (x->bframes - 1));
                 x->wrapflag = 1;
             } else {
                 x->wrapflag = 0;
             }
         } else {
-            x->startsel = CLAMP( positionstart * x->maxloop, 0.0, x->maxloop );
-            x->endsel = x->startsel + (x->selection * x->maxloop);
-            if (x->endsel > x->maxloop) {
-                x->endsel = x->endsel - x->maxloop;
+            x->startloop = CLAMP( positionstart * x->maxloop, 0.0, x->maxloop );
+            x->endloop = x->startloop + (x->selection * x->maxloop);
+            if (x->endloop > x->maxloop) {
+                x->endloop = x->endloop - x->maxloop;
+                x->wrapflag = 1;
+            } else {
+                x->wrapflag = 0;
+            }
+        }
+        
+        post("startlow is now %.2f samples", x->startloop);  // temp
+    }
+}
+/*
+void karma_start(t_karma *x, double positionstart)   // positionstart = "position" float message
+{
+    t_bool startoveride = x->startoveride;
+    double startloop = x->startloop;  // already clamped / etc ...
+    double endloop = x->endloop;      // ...
+    x->selstart = positionstart;
+    
+    if (!x->looprecord)
+    {
+        if (x->directionorig < 0) {
+            startloop = CLAMP( ((x->bframes - 1) - x->maxloop) + (x->selstart * x->maxloop), (x->bframes - 1) - x->maxloop, (x->bframes - 1) );
+            endloop = startloop + (x->selection * x->maxloop);
+            if (endloop > (x->bframes - 1)) {
+                endloop = ((x->bframes - 1) - x->maxloop) + (endloop - (x->bframes - 1));
+                x->wrapflag = 1;
+            } else {
+                x->wrapflag = 0;
+            }
+        } else {
+            startloop = CLAMP( positionstart * x->maxloop, 0.0, x->maxloop );
+            endloop = startloop + (x->selection * x->maxloop);
+            if (endloop > x->maxloop) {
+                endloop = endloop - x->maxloop;
+                x->wrapflag = 1;
+            } else {
+                x->wrapflag = 0;
+            }
+        }
+        
+        x->startloop = startoveride ? x->startloop : startloop;
+        x->endloop = startoveride ? x->endloop : endloop;
+        x->startoveride = false;
+        
+        post("startlow is now %.2f samples", x->startloop);  // temp
+    }
+}
+*/
+/*
+void karma_start_overide(t_karma *x, double endloop)
+{
+    if (!x->looprecord)
+    {
+        if (x->directionorig < 0) {
+            if (endloop > (x->bframes - 1)) {
+                x->wrapflag = 1;
+            } else {
+                x->wrapflag = 0;
+            }
+        } else {
+            if (endloop > x->maxloop) {
                 x->wrapflag = 1;
             } else {
                 x->wrapflag = 0;
@@ -1297,8 +1381,8 @@ void karma_start(t_karma *x, double positionstart)   // positionstart = "positio
         }
     }
 }
-
-// !! pete: i do not like the name "window" - surely it should be "selection" ??
+*/
+// !! pete: i do not like the name "window" - surely it should be "karma_selection" or "karma_selection_size" ??
 void karma_window(t_karma *x, double duration)   // duration = "window" float message
 {
     t_ptr_int maxloop = x->maxloop;
@@ -1309,17 +1393,17 @@ void karma_window(t_karma *x, double duration)   // duration = "window" float me
     if (!x->looprecord) {
         x->selection = (duration < minsampsnorm) ? minsampsnorm : duration;   // !! fix - this not quite right :-) !!
         if (x->directionorig < 0) {
-            x->endsel = x->startsel + (x->selection * maxloop);
-            if (x->endsel > (x->bframes - 1)) {
-                x->endsel = ((x->bframes - 1) - x->maxloop) + (x->endsel - (x->bframes - 1));
+            x->endloop = x->startloop + (x->selection * maxloop);
+            if (x->endloop > (x->bframes - 1)) {
+                x->endloop = ((x->bframes - 1) - x->maxloop) + (x->endloop - (x->bframes - 1));
                 x->wrapflag = 1;
             } else {
                 x->wrapflag = 0;
             }
         } else {
-            x->endsel = x->startsel + (x->selection * maxloop);
-            if(x->endsel > maxloop) {
-                x->endsel = x->endsel - maxloop;
+            x->endloop = x->startloop + (x->selection * maxloop);
+            if(x->endloop > maxloop) {
+                x->endloop = x->endloop - maxloop;
                 x->wrapflag = 1;
             } else {
                 x->wrapflag=0;
@@ -1625,7 +1709,7 @@ void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long v
             x->initinit = 1;
         } else {
             karma_window(x, x->selection);
-            karma_start(x, x->startpos);
+            karma_start(x, x->selstart);
         }
 /*  } else {
         object_error((t_object *)x, "fails without buffer~ name!");
@@ -1653,11 +1737,11 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     int n = vcount;
     
     double accuratehead, maxhead, jumphead, srscale, sprale, rdif, pokesteps;
-    double speed, osamp1, overdubamp, overdubprev, ovdbdif, startpos, xwin;
+    double speed, osamp1, overdubamp, overdubprev, ovdbdif, selstart, xwin;
     double o1prev, o1dif, frac, snrfade, globalramp, snrramp, writeval1, coeff1, recin1;
     t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
     char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
-    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startsel, endsel, playhead, rpre, maxloop, nchan, snrtype, interp;
+    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startloop, endloop, playhead, rpre, maxloop, nchan, snrtype, interp;
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
     float *b = buffer_locksamples(buf);
@@ -1695,9 +1779,9 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     maxloop         = x->maxloop;
     xwin            = x->selection;
     looprecord      = x->looprecord;
-    startsel        = x->startsel;
-    startpos        = x->startpos;
-    endsel          = x->endsel;
+    startloop       = x->startloop;
+    selstart        = x->selstart;
+    endloop         = x->endloop;
     recendmark      = x->recendmark;
     overdubamp      = x->overdubprev;
     overdubprev     = x->overdubamp;
@@ -1828,10 +1912,10 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         if (directionorig >= 0)
                         {
                             maxloop = CLAMP(maxhead, 4096, frames - 1);
-                            accuratehead = startsel = (startpos * maxloop);
-                            endsel = startsel + (xwin * maxloop);
-                            if (endsel > maxloop) {
-                                endsel = endsel - (maxloop + 1);
+                            accuratehead = startloop = (selstart * maxloop);
+                            endloop = startloop + (xwin * maxloop);
+                            if (endloop > maxloop) {
+                                endloop = endloop - (maxloop + 1);
                                 wrapflag = 1;
                             } else {
                                 wrapflag = 0;
@@ -1842,15 +1926,15 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             }
                         } else {
                             maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                            startsel = ((frames - 1) - maxloop) + (startpos * maxloop);
-                            accuratehead = endsel = startsel + (xwin * maxloop);
-                            if (endsel > (frames - 1)) {
-                                endsel = ((frames - 1) - maxloop) + (endsel - frames);
+                            startloop = ((frames - 1) - maxloop) + (selstart * maxloop);
+                            accuratehead = endloop = startloop + (xwin * maxloop);
+                            if (endloop > (frames - 1)) {
+                                endloop = ((frames - 1) - maxloop) + (endloop - frames);
                                 wrapflag = 1;
                             } else {
                                 wrapflag = 0;
                             }
-                            accuratehead = endsel;
+                            accuratehead = endloop;
                             if (direction > 0) {
                                 if (globalramp)
                                     ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -1866,7 +1950,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         if (jumpflag)
                             accuratehead = (directionorig >= 0) ? (jumphead * maxloop) : (((frames - 1) - maxloop) + (jumphead * maxloop));
                         else
-                            accuratehead = (direction < 0) ? endsel : startsel;
+                            accuratehead = (direction < 0) ? endloop : startloop;
                         if (record) {
                             if (globalramp) {
                                 ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -1887,10 +1971,10 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                     if (jumpflag)
                     {
                         if (wrapflag) {
-                            if ((accuratehead < endsel) || (accuratehead > startsel))
+                            if ((accuratehead < endloop) || (accuratehead > startloop))
                                 jumpflag = 0;
                         } else {
-                            if ((accuratehead < endsel) && (accuratehead > startsel))
+                            if ((accuratehead < endloop) && (accuratehead > startloop))
                                 jumpflag = 0;
                         }
                         if (directionorig >= 0)
@@ -1948,9 +2032,9 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                     } else {    // regular 'window' / 'position' constraints
                         if (wrapflag)
                         {
-                            if ((accuratehead > endsel) && (accuratehead < startsel))
+                            if ((accuratehead > endloop) && (accuratehead < startloop))
                             {
-                                accuratehead = (direction >= 0) ? startsel : endsel;
+                                accuratehead = (direction >= 0) ? startloop : endloop;
                                 snrfade = 0.0;
                                 if (record) {
                                     if (globalramp) {
@@ -2015,9 +2099,9 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 }
                             }
                         } else {
-                            if ((accuratehead > endsel) || (accuratehead < startsel))
+                            if ((accuratehead > endloop) || (accuratehead < startloop))
                             {
-                                accuratehead = (direction >= 0) ? startsel : endsel;
+                                accuratehead = (direction >= 0) ? startloop : endloop;
                                 snrfade = 0.0;
                                 if (record) {
                                     if (globalramp) {
@@ -2648,8 +2732,8 @@ apned:
     x->playfade         = playfade;
     x->maxloop          = maxloop;
     x->looprecord       = looprecord;
-    x->startsel         = startsel;
-    x->endsel           = endsel;
+    x->startloop         = startloop;
+    x->endloop           = endloop;
     x->overdubprev      = overdubamp;
     x->recendmark       = recendmark;
     x->append           = append;
@@ -2683,11 +2767,11 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     int n = vcount;
     
     double accuratehead, maxhead, jumphead, srscale, sprale, rdif, pokesteps;
-    double speed, osamp1, osamp2, overdubamp, overdubprev, ovdbdif, startpos, xwin;
+    double speed, osamp1, osamp2, overdubamp, overdubprev, ovdbdif, selstart, xwin;
     double o1prev, o2prev, o1dif, o2dif, frac, snrfade, globalramp, snrramp, writeval1, writeval2, coeff1, coeff2, recin1, recin2;
     t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
     char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
-    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startsel, endsel, playhead, rpre, maxloop, nchan, snrtype, interp;
+    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startloop, endloop, playhead, rpre, maxloop, nchan, snrtype, interp;
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
     float *b = buffer_locksamples(buf);
@@ -2728,9 +2812,9 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     maxloop         = x->maxloop;
     xwin            = x->selection;
     looprecord      = x->looprecord;
-    startsel        = x->startsel;
-    startpos        = x->startpos;
-    endsel          = x->endsel;
+    startloop       = x->startloop;
+    selstart        = x->selstart;
+    endloop         = x->endloop;
     recendmark      = x->recendmark;
     overdubamp      = x->overdubprev;
     overdubprev     = x->overdubamp;
@@ -2865,10 +2949,10 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startsel = (startpos * maxloop);
-                                endsel = startsel + (xwin * maxloop);
-                                if (endsel > maxloop) {
-                                    endsel = endsel - (maxloop + 1);
+                                accuratehead = startloop = (selstart * maxloop);
+                                endloop = startloop + (xwin * maxloop);
+                                if (endloop > maxloop) {
+                                    endloop = endloop - (maxloop + 1);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -2879,15 +2963,15 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startsel = ((frames - 1) - maxloop) + (startpos * maxloop);
-                                accuratehead = endsel = startsel + (xwin * maxloop);
-                                if (endsel > (frames - 1)) {
-                                    endsel = ((frames - 1) - maxloop) + (endsel - frames);
+                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop);
+                                accuratehead = endloop = startloop + (xwin * maxloop);
+                                if (endloop > (frames - 1)) {
+                                    endloop = ((frames - 1) - maxloop) + (endloop - frames);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
                                 }
-                                accuratehead = endsel;
+                                accuratehead = endloop;
                                 if (direction > 0) {
                                     if (globalramp)
                                         ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -2903,7 +2987,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             if (jumpflag)
                                 accuratehead = (directionorig >= 0) ? (jumphead * maxloop) : (((frames - 1) - maxloop) + (jumphead * maxloop));
                             else
-                                accuratehead = (direction < 0) ? endsel : startsel;
+                                accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
                                 if (globalramp) {
                                     ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -2924,10 +3008,10 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                         if (jumpflag)
                         {
                             if (wrapflag) {
-                                if ((accuratehead < endsel) || (accuratehead > startsel))
+                                if ((accuratehead < endloop) || (accuratehead > startloop))
                                     jumpflag = 0;
                             } else {
-                                if ((accuratehead < endsel) && (accuratehead > startsel))
+                                if ((accuratehead < endloop) && (accuratehead > startloop))
                                     jumpflag = 0;
                             }
                             if (directionorig >= 0)
@@ -2985,9 +3069,9 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                         } else {    // regular 'window' / 'position' constraints
                             if (wrapflag)
                             {
-                                if ((accuratehead > endsel) && (accuratehead < startsel))
+                                if ((accuratehead > endloop) && (accuratehead < startloop))
                                 {
-                                    accuratehead = (direction >= 0) ? startsel : endsel;
+                                    accuratehead = (direction >= 0) ? startloop : endloop;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -3052,9 +3136,9 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     }
                                 }
                             } else {
-                                if ((accuratehead > endsel) || (accuratehead < startsel))
+                                if ((accuratehead > endloop) || (accuratehead < startloop))
                                 {
-                                    accuratehead = (direction >= 0) ? startsel : endsel;
+                                    accuratehead = (direction >= 0) ? startloop : endloop;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -3760,10 +3844,10 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startsel = (startpos * maxloop);
-                                endsel = startsel + (xwin * maxloop);
-                                if (endsel > maxloop) {
-                                    endsel = endsel - (maxloop + 1);
+                                accuratehead = startloop = (selstart * maxloop);
+                                endloop = startloop + (xwin * maxloop);
+                                if (endloop > maxloop) {
+                                    endloop = endloop - (maxloop + 1);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -3774,15 +3858,15 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startsel = ((frames - 1) - maxloop) + (startpos * maxloop);
-                                accuratehead = endsel = startsel + (xwin * maxloop);
-                                if (endsel > (frames - 1)) {
-                                    endsel = ((frames - 1) - maxloop) + (endsel - frames);
+                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop);
+                                accuratehead = endloop = startloop + (xwin * maxloop);
+                                if (endloop > (frames - 1)) {
+                                    endloop = ((frames - 1) - maxloop) + (endloop - frames);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
                                 }
-                                accuratehead = endsel;
+                                accuratehead = endloop;
                                 if (direction > 0) {
                                     if (globalramp)
                                         ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -3798,7 +3882,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             if (jumpflag)
                                 accuratehead = (directionorig >= 0) ? (jumphead * maxloop) : (((frames - 1) - maxloop) + (jumphead * maxloop));
                             else
-                                accuratehead = (direction < 0) ? endsel : startsel;
+                                accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
                                 if (globalramp) {
                                     ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -3819,10 +3903,10 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                         if (jumpflag)
                         {
                             if (wrapflag) {
-                                if ((accuratehead < endsel) || (accuratehead > startsel))
+                                if ((accuratehead < endloop) || (accuratehead > startloop))
                                     jumpflag = 0;
                             } else {
-                                if ((accuratehead < endsel) && (accuratehead > startsel))
+                                if ((accuratehead < endloop) && (accuratehead > startloop))
                                     jumpflag = 0;
                             }
                             if (directionorig >= 0)
@@ -3880,9 +3964,9 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                         } else {    // regular 'window' / 'position' constraints
                             if (wrapflag)
                             {
-                                if ((accuratehead > endsel) && (accuratehead < startsel))
+                                if ((accuratehead > endloop) && (accuratehead < startloop))
                                 {
-                                    accuratehead = (direction >= 0) ? startsel : endsel;
+                                    accuratehead = (direction >= 0) ? startloop : endloop;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -3947,9 +4031,9 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     }
                                 }
                             } else {
-                                if ((accuratehead > endsel) || (accuratehead < startsel))
+                                if ((accuratehead > endloop) || (accuratehead < startloop))
                                 {
-                                    accuratehead = (direction >= 0) ? startsel : endsel;
+                                    accuratehead = (direction >= 0) ? startloop : endloop;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -4587,8 +4671,8 @@ apnde:
     x->playfade         = playfade;
     x->maxloop          = maxloop;
     x->looprecord       = looprecord;
-    x->startsel         = startsel;
-    x->endsel           = endsel;
+    x->startloop         = startloop;
+    x->endloop           = endloop;
     x->overdubprev      = overdubamp;
     x->recendmark       = recendmark;
     x->append           = append;
@@ -4627,12 +4711,12 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     int n = vcount;
     
     double accuratehead, maxhead, jumphead, srscale, sprale, rdif, pokesteps;
-    double speed, osamp1, osamp2, osamp3, osamp4, overdubamp, overdubprev, ovdbdif, startpos, xwin;
+    double speed, osamp1, osamp2, osamp3, osamp4, overdubamp, overdubprev, ovdbdif, selstart, xwin;
     double o1prev, o2prev, o1dif, o2dif, o3prev, o4prev, o3dif, o4dif, frac, snrfade, globalramp, snrramp;
     double writeval1, writeval2, writeval3, writeval4, coeff1, coeff2, coeff3, coeff4, recin1, recin2, recin3, recin4;
     t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
     char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
-    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startsel, endsel, playhead, rpre, maxloop, nchan, snrtype, interp;
+    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startloop, endloop, playhead, rpre, maxloop, nchan, snrtype, interp;
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
     float *b = buffer_locksamples(buf);
@@ -4679,9 +4763,9 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     maxloop         = x->maxloop;
     xwin            = x->selection;
     looprecord      = x->looprecord;
-    startsel        = x->startsel;
-    startpos        = x->startpos;
-    endsel          = x->endsel;
+    startloop       = x->startloop;
+    selstart        = x->selstart;
+    endloop         = x->endloop;
     recendmark      = x->recendmark;
     overdubamp      = x->overdubprev;
     overdubprev     = x->overdubamp;
@@ -4818,10 +4902,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startsel = (startpos * maxloop);
-                                endsel = startsel + (xwin * maxloop);
-                                if (endsel > maxloop) {
-                                    endsel = endsel - (maxloop + 1);
+                                accuratehead = startloop = (selstart * maxloop);
+                                endloop = startloop + (xwin * maxloop);
+                                if (endloop > maxloop) {
+                                    endloop = endloop - (maxloop + 1);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -4832,15 +4916,15 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startsel = ((frames - 1) - maxloop) + (startpos * maxloop);
-                                accuratehead = endsel = startsel + (xwin * maxloop);
-                                if (endsel > (frames - 1)) {
-                                    endsel = ((frames - 1) - maxloop) + (endsel - frames);
+                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop);
+                                accuratehead = endloop = startloop + (xwin * maxloop);
+                                if (endloop > (frames - 1)) {
+                                    endloop = ((frames - 1) - maxloop) + (endloop - frames);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
                                 }
-                                accuratehead = endsel;
+                                accuratehead = endloop;
                                 if (direction > 0) {
                                     if (globalramp)
                                         ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -4856,7 +4940,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             if (jumpflag)
                                 accuratehead = (directionorig >= 0) ? (jumphead * maxloop) : (((frames - 1) - maxloop) + (jumphead * maxloop));
                             else
-                                accuratehead = (direction < 0) ? endsel : startsel;
+                                accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
                                 if (globalramp) {
                                     ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -4877,10 +4961,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         if (jumpflag)
                         {
                             if (wrapflag) {
-                                if ((accuratehead < endsel) || (accuratehead > startsel))
+                                if ((accuratehead < endloop) || (accuratehead > startloop))
                                     jumpflag = 0;
                             } else {
-                                if ((accuratehead < endsel) && (accuratehead > startsel))
+                                if ((accuratehead < endloop) && (accuratehead > startloop))
                                     jumpflag = 0;
                             }
                             if (directionorig >= 0)
@@ -4938,9 +5022,9 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         } else {    // regular 'window' / 'position' constraints
                             if (wrapflag)
                             {
-                                if ((accuratehead > endsel) && (accuratehead < startsel))
+                                if ((accuratehead > endloop) && (accuratehead < startloop))
                                 {
-                                    accuratehead = (direction >= 0) ? startsel : endsel;
+                                    accuratehead = (direction >= 0) ? startloop : endloop;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -5005,9 +5089,9 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     }
                                 }
                             } else {
-                                if ((accuratehead > endsel) || (accuratehead < startsel))
+                                if ((accuratehead > endloop) || (accuratehead < startloop))
                                 {
-                                    accuratehead = (direction >= 0) ? startsel : endsel;
+                                    accuratehead = (direction >= 0) ? startloop : endloop;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -5853,10 +5937,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startsel = (startpos * maxloop);
-                                endsel = startsel + (xwin * maxloop);
-                                if (endsel > maxloop) {
-                                    endsel = endsel - (maxloop + 1);
+                                accuratehead = startloop = (selstart * maxloop);
+                                endloop = startloop + (xwin * maxloop);
+                                if (endloop > maxloop) {
+                                    endloop = endloop - (maxloop + 1);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -5867,15 +5951,15 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startsel = ((frames - 1) - maxloop) + (startpos * maxloop);
-                                accuratehead = endsel = startsel + (xwin * maxloop);
-                                if (endsel > (frames - 1)) {
-                                    endsel = ((frames - 1) - maxloop) + (endsel - frames);
+                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop);
+                                accuratehead = endloop = startloop + (xwin * maxloop);
+                                if (endloop > (frames - 1)) {
+                                    endloop = ((frames - 1) - maxloop) + (endloop - frames);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
                                 }
-                                accuratehead = endsel;
+                                accuratehead = endloop;
                                 if (direction > 0) {
                                     if (globalramp)
                                         ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -5891,7 +5975,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             if (jumpflag)
                                 accuratehead = (directionorig >= 0) ? (jumphead * maxloop) : (((frames - 1) - maxloop) + (jumphead * maxloop));
                             else
-                                accuratehead = (direction < 0) ? endsel : startsel;
+                                accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
                                 if (globalramp) {
                                     ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -5912,10 +5996,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         if (jumpflag)
                         {
                             if (wrapflag) {
-                                if ((accuratehead < endsel) || (accuratehead > startsel))
+                                if ((accuratehead < endloop) || (accuratehead > startloop))
                                     jumpflag = 0;
                             } else {
-                                if ((accuratehead < endsel) && (accuratehead > startsel))
+                                if ((accuratehead < endloop) && (accuratehead > startloop))
                                     jumpflag = 0;
                             }
                             if (directionorig >= 0)
@@ -5973,9 +6057,9 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         } else {    // regular 'window' / 'position' constraints
                             if (wrapflag)
                             {
-                                if ((accuratehead > endsel) && (accuratehead < startsel))
+                                if ((accuratehead > endloop) && (accuratehead < startloop))
                                 {
-                                    accuratehead = (direction >= 0) ? startsel : endsel;
+                                    accuratehead = (direction >= 0) ? startloop : endloop;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -6040,9 +6124,9 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     }
                                 }
                             } else {
-                                if ((accuratehead > endsel) || (accuratehead < startsel))
+                                if ((accuratehead > endloop) || (accuratehead < startloop))
                                 {
-                                    accuratehead = (direction >= 0) ? startsel : endsel;
+                                    accuratehead = (direction >= 0) ? startloop : endloop;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -6822,10 +6906,10 @@ apden:
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startsel = (startpos * maxloop);
-                                endsel = startsel + (xwin * maxloop);
-                                if (endsel > maxloop) {
-                                    endsel = endsel - (maxloop + 1);
+                                accuratehead = startloop = (selstart * maxloop);
+                                endloop = startloop + (xwin * maxloop);
+                                if (endloop > maxloop) {
+                                    endloop = endloop - (maxloop + 1);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -6836,15 +6920,15 @@ apden:
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startsel = ((frames - 1) - maxloop) + (startpos * maxloop);
-                                accuratehead = endsel = startsel + (xwin * maxloop);
-                                if (endsel > (frames - 1)) {
-                                    endsel = ((frames - 1) - maxloop) + (endsel - frames);
+                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop);
+                                accuratehead = endloop = startloop + (xwin * maxloop);
+                                if (endloop > (frames - 1)) {
+                                    endloop = ((frames - 1) - maxloop) + (endloop - frames);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
                                 }
-                                accuratehead = endsel;
+                                accuratehead = endloop;
                                 if (direction > 0) {
                                     if (globalramp)
                                         ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -6860,7 +6944,7 @@ apden:
                             if (jumpflag)
                                 accuratehead = (directionorig >= 0) ? (jumphead * maxloop) : (((frames - 1) - maxloop) + (jumphead * maxloop));
                             else
-                                accuratehead = (direction < 0) ? endsel : startsel;
+                                accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
                                 if (globalramp) {
                                     ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -6881,10 +6965,10 @@ apden:
                         if (jumpflag)
                         {
                             if (wrapflag) {
-                                if ((accuratehead < endsel) || (accuratehead > startsel))
+                                if ((accuratehead < endloop) || (accuratehead > startloop))
                                     jumpflag = 0;
                             } else {
-                                if ((accuratehead < endsel) && (accuratehead > startsel))
+                                if ((accuratehead < endloop) && (accuratehead > startloop))
                                     jumpflag = 0;
                             }
                             if (directionorig >= 0)
@@ -6942,9 +7026,9 @@ apden:
                         } else {    // regular 'window' / 'position' constraints
                             if (wrapflag)
                             {
-                                if ((accuratehead > endsel) && (accuratehead < startsel))
+                                if ((accuratehead > endloop) && (accuratehead < startloop))
                                 {
-                                    accuratehead = (direction >= 0) ? startsel : endsel;
+                                    accuratehead = (direction >= 0) ? startloop : endloop;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -7009,9 +7093,9 @@ apden:
                                     }
                                 }
                             } else {
-                                if ((accuratehead > endsel) || (accuratehead < startsel))
+                                if ((accuratehead > endloop) || (accuratehead < startloop))
                                 {
-                                    accuratehead = (direction >= 0) ? startsel : endsel;
+                                    accuratehead = (direction >= 0) ? startloop : endloop;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -7727,10 +7811,10 @@ apdne:
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startsel = (startpos * maxloop);
-                                endsel = startsel + (xwin * maxloop);
-                                if (endsel > maxloop) {
-                                    endsel = endsel - (maxloop + 1);
+                                accuratehead = startloop = (selstart * maxloop);
+                                endloop = startloop + (xwin * maxloop);
+                                if (endloop > maxloop) {
+                                    endloop = endloop - (maxloop + 1);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -7741,15 +7825,15 @@ apdne:
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startsel = ((frames - 1) - maxloop) + (startpos * maxloop);
-                                accuratehead = endsel = startsel + (xwin * maxloop);
-                                if (endsel > (frames - 1)) {
-                                    endsel = ((frames - 1) - maxloop) + (endsel - frames);
+                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop);
+                                accuratehead = endloop = startloop + (xwin * maxloop);
+                                if (endloop > (frames - 1)) {
+                                    endloop = ((frames - 1) - maxloop) + (endloop - frames);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
                                 }
-                                accuratehead = endsel;
+                                accuratehead = endloop;
                                 if (direction > 0) {
                                     if (globalramp)
                                         ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -7765,7 +7849,7 @@ apdne:
                             if (jumpflag)
                                 accuratehead = (directionorig >= 0) ? (jumphead * maxloop) : (((frames - 1) - maxloop) + (jumphead * maxloop));
                             else
-                                accuratehead = (direction < 0) ? endsel : startsel;
+                                accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
                                 if (globalramp) {
                                     ease_bufon(frames - 1, b, nchan, accuratehead, rpre, direction, globalramp);
@@ -7786,10 +7870,10 @@ apdne:
                         if (jumpflag)
                         {
                             if (wrapflag) {
-                                if ((accuratehead < endsel) || (accuratehead > startsel))
+                                if ((accuratehead < endloop) || (accuratehead > startloop))
                                     jumpflag = 0;
                             } else {
-                                if ((accuratehead < endsel) && (accuratehead > startsel))
+                                if ((accuratehead < endloop) && (accuratehead > startloop))
                                     jumpflag = 0;
                             }
                             if (directionorig >= 0)
@@ -7847,9 +7931,9 @@ apdne:
                         } else {    // regular 'window' / 'position' constraints
                             if (wrapflag)
                             {
-                                if ((accuratehead > endsel) && (accuratehead < startsel))
+                                if ((accuratehead > endloop) && (accuratehead < startloop))
                                 {
-                                    accuratehead = (direction >= 0) ? startsel : endsel;
+                                    accuratehead = (direction >= 0) ? startloop : endloop;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -7914,9 +7998,9 @@ apdne:
                                     }
                                 }
                             } else {
-                                if ((accuratehead > endsel) || (accuratehead < startsel))
+                                if ((accuratehead > endloop) || (accuratehead < startloop))
                                 {
-                                    accuratehead = (direction >= 0) ? startsel : endsel;
+                                    accuratehead = (direction >= 0) ? startloop : endloop;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -8570,8 +8654,8 @@ apnde:
     x->playfade         = playfade;
     x->maxloop          = maxloop;
     x->looprecord       = looprecord;
-    x->startsel         = startsel;
-    x->endsel           = endsel;
+    x->startloop         = startloop;
+    x->endloop           = endloop;
     x->overdubprev      = overdubamp;
     x->recendmark       = recendmark;
     x->append           = append;
