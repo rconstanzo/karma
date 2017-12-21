@@ -53,8 +53,8 @@
 //  //  //  fix: a bunch of bugs & stuff, incl. ...
 //  //  //  - scheduling and threading problem relating to inability to call multiple methods to the object ...
 //  //  //  ... by using comma-separated message boxes (etc) <<-- big bug
-//  //  //  - 'startloop' not working because of "position" tie-in, rewrite 'karma_start' method (also affects buffer 'set' & 'setloop' etc bugs)
 //  //  //  - 'statehuman' (statemachine) output (including the overdub notify bug)
+//  //  //  - when new loop points are set ("set" or "setloop" methods) list-output not updated correctly
 
 //  //  //  TODO version 2.0:
 //  //  //  rewrite, take multiple perform routines out and put
@@ -136,7 +136,6 @@ typedef struct _karma {
     t_ptr_int   recordhead; // record head position in samples
     t_ptr_int   maxloop;    // the overall loop recorded so far (in samples)
     t_ptr_int   startloop;  // start position (in buffer~) of recorded loop in samples
-    t_ptr_int   startlow;   // start offset (in buffer~) as set by 'set' and 'setloop' (affects 'startloop') - a latch
     t_ptr_int   endloop;    // end position (in buffer~) of recorded loop in samples
     t_ptr_int   pokesteps;  // number of steps (samples) to keep track of in ipoke~ linear averaging scheme
     t_ptr_int   recordfade; // fade counter for recording in samples
@@ -155,7 +154,6 @@ typedef struct _karma {
     char    directionorig;  // original direction loop was initially recorded (if loop was initially recorded in reverse started from end-of-buffer etc)
     char    directionprev;  // previous direction (marker for directional changes to place where fades need to happen during recording)
     
-//  t_bool  startoveride;   // overide karma_start if called from 'karma_buf_values_internal'
     t_bool  stopallowed;    // flag, '0' if already stopped once (& init)
     t_bool  go;             // execute play ??
     t_bool  record;         // record flag
@@ -189,7 +187,6 @@ void        karma_play(t_karma *x);
 void        karma_record(t_karma *x);
 //void      karma_selection_internal(t_karma *x, double selectionstart, double selectionlength);
 void        karma_start(t_karma *x, double positionstart);
-//void      karma_start_overide(t_karma *x, double endloop);
 
 t_max_err   karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat);
 t_max_err   karma_buf_not_temp(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat);
@@ -700,10 +697,9 @@ void karma_buf_setup(t_karma *x, t_symbol *s)
         x->bmsr     = buffer_getmillisamplerate(buf);
         x->bsr      = buffer_getsamplerate(buf);
         x->srscale                  = x->bsr / x->sr;
-        x->selstart = x->startloop  = x->startlow = 0.0;    // !! ??
+        x->selstart = x->startloop  = 0.0;
         x->selection                = 1.0;
         x->maxloop = x->endloop     = (x->bframes - 1);
-        //x->startoveride           = false;
 
     }
 }
@@ -727,14 +723,13 @@ void karma_buf_modset(t_karma *x, t_buffer_obj *b)
             x->srscale                  = bsr / x->sr;
             x->bframes                  = frames;
             x->bchans                   = chans;
-            x->startloop = x->startlow  = 0.;   // !! ??
+            x->startloop                = 0.;
             x->maxloop = x->endloop     = (x->bframes - 1);
 
-            //x->startoveride           = false;
             karma_window(x, x->selection);
             karma_start(x, x->selstart);
             
-            post("modset called");      // temp
+            post("modset called");      // dev
         }
     }
 }
@@ -743,7 +738,7 @@ void karma_buf_modset(t_karma *x, t_buffer_obj *b)
 void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long loop_points_flag, t_bool caller)
 {
     t_buffer_obj *buf;
-    t_symbol *loop_points_sym = 0;                      // temp
+//  t_symbol *loop_points_sym = 0;                      // dev
     double bframesm1, bframesms, bvsnorm, bvsnorm05;    // bframesm1 not needed ?, bframesms is bollox ?
     double low, lowtemp, high, hightemp;
     low = templow;
@@ -755,8 +750,8 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
         x->bchans   = buffer_getchannelcount(buf);
         x->bframes  = buffer_getframecount(buf);
         x->bmsr     = buffer_getmillisamplerate(buf);
-        x->bsr      = buffer_getsamplerate(buf);
-        x->srscale  = x->bsr / x->sr;
+        x->bsr      = buffer_getsamplerate(buf);        // ...
+        x->srscale  = x->bsr / x->sr;                   // ... !! need to account for channels !!
     }
 
     bframesm1   = (double)(x->bframes - 1);
@@ -827,24 +822,23 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
     high    = CLAMP(high, 0., 1.);
 
     // !! now we should update additional data for list outlet ??
-
-    // temp
+/*
+    // dev
     loop_points_sym = (loop_points_flag > 1) ? ps_milliseconds : ((loop_points_flag < 1) ? ps_phase : ps_samples);
     post("loop start normalised %.2f, loop end normalised %.2f, units %s", low, high, *loop_points_sym);
     //post("loop start samples %.2f, loop end samples %.2f, units used %s", (low * bframesm1), (high * bframesm1), *loop_points_sym);
-    
+*/
     // regardless of input choice ('loop_points_flag'), final system is normalised 0..1 (phase)
 
-    //x->startloop = low * bframesm1;
-    //x->maxloop = x->endloop = high * bframesm1;
-    x->startlow = low * bframesm1;              // !! 'x->startloop' is set by call to 'karma_start()' below !!
-    x->maxloop = high * bframesm1;              // !! 'x->endloop' is set by call to 'karma_window()' below !!
+    x->startloop = low * bframesm1;
+    x->maxloop = x->endloop = high * bframesm1;
 
-    // update
-    karma_start(x, x->selstart);
-    karma_window(x, x->selection);
-    //karma_selection_internal(x, x->selstart, x->selection);
-
+    // update selection only if no additional args (min/max low/high) (thanks raja, i am an idiot !!)
+    if ( (low <= 0.) && (high >= 1.) ) {
+        karma_start(x, x->selstart);                                // !! raja had _start / _window reversed here !!
+        karma_window(x, x->selection);
+        //karma_selection_internal(x, x->selstart, x->selection);   // !! TODO
+    }
 }
 
 // karma_buf_change method defered
@@ -872,6 +866,8 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
         // !! this "buf_temp" assignment is to check for a valid buffer, so that karma~ playback...
         // ...continues with main assigned "buf" even if symbol given is in error !!
         // this is slow (& expensive ??) - there must be a better way ??
+        
+        // use 'buffer_ref_exists()' instead ??
         
         x->bufname_temp = b_temp;
         
@@ -1023,10 +1019,10 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
                 }
                 
             }
-
-            // temp
+/*
+            // dev
             post("%s message: buffer~ %s", s->s_name, b->s_name);
-            
+*/
             karma_buf_values_internal(x, templow, temphigh, loop_points_flag, callerid);
 
             //x->buf_temp = 0;                          // should (dsp)free here and not earlier ??
@@ -1066,7 +1062,7 @@ void karma_buf_change(t_karma *x, t_symbol *s, short ac, t_atom *av)    // " set
             store_av[i] = av[i];
         }
 
-    } else {                        // this is a shame, how do i pass a t_atom without knowing # of items ?
+    } else {                        // this is a shame, how do i pass a t_atom without knowing # of atoms ?
         
         for (i = 0; i < a; i++) {
             store_av[i] = av[i];
@@ -1192,10 +1188,10 @@ void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)  
         }
         
     }
-
-    // temp
+/*
+    // dev
     post("%s message:", s->s_name);
-
+*/
     karma_buf_values_internal(x, templow, temphigh, loop_points_flag, callerid);
     
 }
@@ -1232,7 +1228,7 @@ void karma_clock_list(t_karma *x)
         atom_setlong(   datalist + 6,   statehuman  );                                                      // state flag int
         
 //      outlet_list(x->messout, 0L, 7, &datalist);
-        outlet_list(x->messout, gensym("list"), 7, datalist);   // !! &datalist ??
+        outlet_list(x->messout, gensym("list"), 7, datalist);
 
         if (sys_getdspstate() && (x->reportlist > 0)) {         // '&& (x->reportlist > 0)' ??
             clock_delay(x->tclock, x->reportlist);
@@ -1299,7 +1295,6 @@ void karma_assist(t_karma *x, void *b, long m, long a, char *s)
 void karma_selection_internal(t_karma *x, double selectionstart, double selectionlength)
 {
     t_ptr_int maxloop = x->maxloop;                 //  in samples
-    t_ptr_int startlow = x->startlow;               //  maybe...
     double minsamps, minsampsnorm;  // temp...
     minsamps = 4.0;                 // ...
     minsampsnorm = minsamps / x->sr;// ...          // 4 samples minimum as normalised value (against sr)
@@ -1310,8 +1305,7 @@ void karma_selection_internal(t_karma *x, double selectionstart, double selectio
     if (!x->looprecord)
     {
         if (x->directionorig < 0) { // if originally in reverse
-            startlow = startlow + (((x->bframes - 1) - maxloop) + (x->selstart * maxloop));
-            x->startloop = CLAMP( startlow, (x->bframes - 1) - maxloop, (x->bframes - 1) );
+            x->startloop = CLAMP( ((x->bframes - 1) - maxloop) + (x->selstart * maxloop), (x->bframes - 1) - maxloop, (x->bframes - 1) );
             x->endloop = x->startloop + (x->selection * maxloop);
             if (x->endloop > (x->bframes - 1)) {
                 x->endloop = ((x->bframes - 1) - maxloop) + (x->endloop - (x->bframes - 1));
@@ -1320,7 +1314,7 @@ void karma_selection_internal(t_karma *x, double selectionstart, double selectio
                 x->wrapflag = 0;
             }
         } else {                    // if originally forwards
-            x->startloop = CLAMP( startlow + (selectionstart * maxloop), 0.0, maxloop );
+            x->startloop = CLAMP( selectionstart * maxloop, 0.0, maxloop );
             x->endloop = x->startloop + (x->selection * maxloop);
             if (x->endloop > maxloop) {
                 x->endloop = x->endloop - maxloop;
@@ -1329,9 +1323,7 @@ void karma_selection_internal(t_karma *x, double selectionstart, double selectio
                 x->wrapflag = 0;
             }
         }
-        //post("startlow is now %.2f samples", x->startlow);  // temp
     }
-    //x->startlow = 0.;   // reset (only called via 'karma_buf_values_internal()')
 }
 */
 /*
@@ -1344,17 +1336,12 @@ void karma_start(t_karma *x, double positionstart)
 void karma_start(t_karma *x, double positionstart)      //  positionstart = "position" float message
 {                                                       // 'positionstart' (& 'selstart') is normalised 0..1 value here
     t_ptr_int maxloop = x->maxloop;                     //  in samples
-    t_ptr_int startlow = x->startlow;                   //  maybe...
     x->selstart = positionstart;
     
-    // !! BUG :: 'x->startloop' is reassigned here, but if 'karma_start' is called by...
-    // ...'karma_buf_values_internal()' this totally fucks up the new 'low' loop point !!
     if (!x->looprecord)
     {
-        //x->endloop = x->startloop + (x->selection * maxloop);
         if (x->directionorig < 0) { // if originally in reverse
-            startlow = startlow + (((x->bframes - 1) - maxloop) + (x->selstart * maxloop));
-            x->startloop = CLAMP( startlow, (x->bframes - 1) - maxloop, (x->bframes - 1) );
+            x->startloop = CLAMP( ((x->bframes - 1) - maxloop) + (x->selstart * maxloop), (x->bframes - 1) - maxloop, (x->bframes - 1) );
             x->endloop = x->startloop + (x->selection * maxloop);
             if (x->endloop > (x->bframes - 1)) {
                 x->endloop = ((x->bframes - 1) - maxloop) + (x->endloop - (x->bframes - 1));
@@ -1363,7 +1350,7 @@ void karma_start(t_karma *x, double positionstart)      //  positionstart = "pos
                 x->wrapflag = 0;
             }
         } else {                    // if originally forwards
-            x->startloop = CLAMP( startlow + (positionstart * maxloop), 0.0, maxloop );
+            x->startloop = CLAMP( positionstart * maxloop, 0.0, maxloop );
             x->endloop = x->startloop + (x->selection * maxloop);
             if (x->endloop > maxloop) {
                 x->endloop = x->endloop - maxloop;
@@ -1372,70 +1359,8 @@ void karma_start(t_karma *x, double positionstart)      //  positionstart = "pos
                 x->wrapflag = 0;
             }
         }
-        //x->startlow = 0.;         // !! zero-ed in perform loop
-        
-        post("startloop START now %.2f samples", x->startloop);  // temp
     }
 }
-/*
-void karma_start(t_karma *x, double positionstart)   // positionstart = "position" float message
-{
-    t_bool startoveride = x->startoveride;
-    double startloop = x->startloop;  // already clamped / etc ...
-    double endloop = x->endloop;      // ...
-    x->selstart = positionstart;
-    
-    if (!x->looprecord)
-    {
-        if (x->directionorig < 0) {
-            startloop = CLAMP( ((x->bframes - 1) - x->maxloop) + (x->selstart * x->maxloop), (x->bframes - 1) - x->maxloop, (x->bframes - 1) );
-            endloop = startloop + (x->selection * x->maxloop);
-            if (endloop > (x->bframes - 1)) {
-                endloop = ((x->bframes - 1) - x->maxloop) + (endloop - (x->bframes - 1));
-                x->wrapflag = 1;
-            } else {
-                x->wrapflag = 0;
-            }
-        } else {
-            startloop = CLAMP( positionstart * x->maxloop, 0.0, x->maxloop );
-            endloop = startloop + (x->selection * x->maxloop);
-            if (endloop > x->maxloop) {
-                endloop = endloop - x->maxloop;
-                x->wrapflag = 1;
-            } else {
-                x->wrapflag = 0;
-            }
-        }
-        
-        x->startloop = startoveride ? x->startloop : startloop;
-        x->endloop = startoveride ? x->endloop : endloop;
-        x->startoveride = false;
-        
-        post("startlow is now %.2f samples", x->startloop);  // temp
-    }
-}
-*/
-/*
-void karma_start_overide(t_karma *x, double endloop)
-{
-    if (!x->looprecord)
-    {
-        if (x->directionorig < 0) {
-            if (endloop > (x->bframes - 1)) {
-                x->wrapflag = 1;
-            } else {
-                x->wrapflag = 0;
-            }
-        } else {
-            if (endloop > x->maxloop) {
-                x->wrapflag = 1;
-            } else {
-                x->wrapflag = 0;
-            }
-        }
-    }
-}
-*/
 /*
 void karma_window(t_karma *x, double duration)
 {
@@ -1453,10 +1378,8 @@ void karma_window(t_karma *x, double duration)      //  duration = "window" floa
     x->selection = (duration < minsampsnorm) ? minsampsnorm : duration;     // !! fix
     if (!x->looprecord)
     {
-//      x->selection = (duration < minsampsnorm) ? minsampsnorm : duration;
         x->endloop = x->startloop + (x->selection * maxloop);
         if (x->directionorig < 0) { // if originally in reverse
-//          x->endloop = x->startloop + (x->selection * maxloop);
             if (x->endloop > (x->bframes - 1)) {
                 x->endloop = ((x->bframes - 1) - maxloop) + (x->endloop - (x->bframes - 1));
                 x->wrapflag = 1;
@@ -1464,7 +1387,6 @@ void karma_window(t_karma *x, double duration)      //  duration = "window" floa
                 x->wrapflag = 0;
             }
         } else {                    // if originally forwards
-//          x->endloop = x->startloop + (x->selection * maxloop);
             if(x->endloop > maxloop) {
                 x->endloop = x->endloop - maxloop;
                 x->wrapflag = 1;
@@ -1472,10 +1394,6 @@ void karma_window(t_karma *x, double duration)      //  duration = "window" floa
                 x->wrapflag = 0;
             }
         }
-//  } else {
-//      x->selection = (duration < minsampsnorm) ? minsampsnorm : duration;
-
-        post("startloop WINDOW is now %.2f samples", x->startloop);  // temp
     }
 }
 
@@ -1806,7 +1724,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     double o1prev, o1dif, frac, snrfade, globalramp, snrramp, writeval1, coeff1, recin1;
     t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
     char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
-    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startlow, startloop, endloop, playhead, rpre, maxloop, nchan, snrtype, interp;
+    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startloop, endloop, playhead, rpre, maxloop, nchan, snrtype, interp;
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
     float *b = buffer_locksamples(buf);
@@ -1844,7 +1762,6 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     maxloop         = x->maxloop;
     xwin            = x->selection;
     looprecord      = x->looprecord;
-    startlow        = x->startlow;
     startloop       = x->startloop;
     selstart        = x->selstart;
     endloop         = x->endloop;
@@ -1978,7 +1895,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         if (directionorig >= 0)
                         {
                             maxloop = CLAMP(maxhead, 4096, frames - 1);
-                            accuratehead = startloop = (startlow + (selstart * maxloop));           // !! setting 'startloop' here is a real problem ??
+                            accuratehead = startloop = (selstart * maxloop);    // !!
                             endloop = startloop + (xwin * maxloop);
                             if (endloop > maxloop) {
                                 endloop = endloop - (maxloop + 1);
@@ -1992,7 +1909,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             }
                         } else {
                             maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                            startloop = startlow + ((frames - 1) - maxloop) + (selstart * maxloop); // !! setting 'startloop' here is a real problem ??
+                            startloop = ((frames - 1) - maxloop) + (selstart * maxloop); // !!
                             accuratehead = endloop = startloop + (xwin * maxloop);
                             if (endloop > (frames - 1)) {
                                 endloop = ((frames - 1) - maxloop) + (endloop - frames);
@@ -2798,9 +2715,8 @@ apned:
     x->playfade         = playfade;
     x->maxloop          = maxloop;
     x->looprecord       = looprecord;
-    x->startloop        = startloop;    // !! should not reassign ??
-    x->endloop          = endloop;      // !! should not reassign ??
-    x->startlow         = 0;            // ??
+    x->startloop        = startloop;
+    x->endloop          = endloop;
     x->overdubprev      = overdubamp;
     x->recendmark       = recendmark;
     x->append           = append;
@@ -2838,7 +2754,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     double o1prev, o2prev, o1dif, o2dif, frac, snrfade, globalramp, snrramp, writeval1, writeval2, coeff1, coeff2, recin1, recin2;
     t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
     char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
-    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startlow, startloop, endloop, playhead, rpre, maxloop, nchan, snrtype, interp;
+    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startloop, endloop, playhead, rpre, maxloop, nchan, snrtype, interp;
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
     float *b = buffer_locksamples(buf);
@@ -2879,7 +2795,6 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     maxloop         = x->maxloop;
     xwin            = x->selection;
     looprecord      = x->looprecord;
-    startlow        = x->startlow;
     startloop       = x->startloop;
     selstart        = x->selstart;
     endloop         = x->endloop;
@@ -3017,7 +2932,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startloop = (startlow + (selstart * maxloop));   // !! setting 'startloop' here is a real problem ??
+                                accuratehead = startloop = (selstart * maxloop);    // !!
                                 endloop = startloop + (xwin * maxloop);
                                 if (endloop > maxloop) {
                                     endloop = endloop - (maxloop + 1);
@@ -3031,7 +2946,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startloop = startlow + ((frames - 1) - maxloop) + (selstart * maxloop); // !! setting 'startloop' here ??
+                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop); // !!
                                 accuratehead = endloop = startloop + (xwin * maxloop);
                                 if (endloop > (frames - 1)) {
                                     endloop = ((frames - 1) - maxloop) + (endloop - frames);
@@ -3912,7 +3827,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startloop = (startlow + (selstart * maxloop));   // !! setting 'startloop' here is a real problem ??
+                                accuratehead = startloop = (selstart * maxloop);    // !!
                                 endloop = startloop + (xwin * maxloop);
                                 if (endloop > maxloop) {
                                     endloop = endloop - (maxloop + 1);
@@ -3926,7 +3841,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startloop = startlow + ((frames - 1) - maxloop) + (selstart * maxloop); // !! setting 'startloop' here ??
+                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop); // !!
                                 accuratehead = endloop = startloop + (xwin * maxloop);
                                 if (endloop > (frames - 1)) {
                                     endloop = ((frames - 1) - maxloop) + (endloop - frames);
@@ -4741,7 +4656,6 @@ apnde:
     x->looprecord       = looprecord;
     x->startloop        = startloop;
     x->endloop          = endloop;
-    x->startlow         = 0;    // ??
     x->overdubprev      = overdubamp;
     x->recendmark       = recendmark;
     x->append           = append;
@@ -4785,7 +4699,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     double writeval1, writeval2, writeval3, writeval4, coeff1, coeff2, coeff3, coeff4, recin1, recin2, recin3, recin4;
     t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
     char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
-    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startlow, startloop, endloop, playhead, rpre, maxloop, nchan, snrtype, interp;
+    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startloop, endloop, playhead, rpre, maxloop, nchan, snrtype, interp;
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
     float *b = buffer_locksamples(buf);
@@ -4832,7 +4746,6 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     maxloop         = x->maxloop;
     xwin            = x->selection;
     looprecord      = x->looprecord;
-    startlow        = x->startlow;
     startloop       = x->startloop;
     selstart        = x->selstart;
     endloop         = x->endloop;
@@ -4972,7 +4885,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startloop = (startlow + (selstart * maxloop));   // !! setting 'startloop' here is a real problem ??
+                                accuratehead = startloop = (selstart * maxloop);    // !!
                                 endloop = startloop + (xwin * maxloop);
                                 if (endloop > maxloop) {
                                     endloop = endloop - (maxloop + 1);
@@ -4986,7 +4899,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startloop = startlow + ((frames - 1) - maxloop) + (selstart * maxloop); // !! setting 'startloop' here ??
+                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop); // !!
                                 accuratehead = endloop = startloop + (xwin * maxloop);
                                 if (endloop > (frames - 1)) {
                                     endloop = ((frames - 1) - maxloop) + (endloop - frames);
@@ -6007,7 +5920,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startloop = (startlow + (selstart * maxloop));   // !! setting 'startloop' here is a real problem ??
+                                accuratehead = startloop = (selstart * maxloop);    // !!
                                 endloop = startloop + (xwin * maxloop);
                                 if (endloop > maxloop) {
                                     endloop = endloop - (maxloop + 1);
@@ -6021,7 +5934,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startloop = startlow + ((frames - 1) - maxloop) + (selstart * maxloop); // !! setting 'startloop' here ??
+                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop); // !!
                                 accuratehead = endloop = startloop + (xwin * maxloop);
                                 if (endloop > (frames - 1)) {
                                     endloop = ((frames - 1) - maxloop) + (endloop - frames);
@@ -6976,7 +6889,7 @@ apden:
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startloop = (startlow + (selstart * maxloop));   // !! setting 'startloop' here is a real problem ??
+                                accuratehead = startloop = (selstart * maxloop);    // !!
                                 endloop = startloop + (xwin * maxloop);
                                 if (endloop > maxloop) {
                                     endloop = endloop - (maxloop + 1);
@@ -6990,7 +6903,7 @@ apden:
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startloop = startlow + ((frames - 1) - maxloop) + (selstart * maxloop); // !! setting 'startloop' here ??
+                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop); // !!
                                 accuratehead = endloop = startloop + (xwin * maxloop);
                                 if (endloop > (frames - 1)) {
                                     endloop = ((frames - 1) - maxloop) + (endloop - frames);
@@ -7881,7 +7794,7 @@ apdne:
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startloop = (startlow + (selstart * maxloop));   // !! setting 'startloop' here is a real problem ??
+                                accuratehead = startloop = (selstart * maxloop);    // !!
                                 endloop = startloop + (xwin * maxloop);
                                 if (endloop > maxloop) {
                                     endloop = endloop - (maxloop + 1);
@@ -7895,7 +7808,7 @@ apdne:
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startloop = startlow + ((frames - 1) - maxloop) + (selstart * maxloop); // !! setting 'startloop' here ??
+                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop); // !!
                                 accuratehead = endloop = startloop + (xwin * maxloop);
                                 if (endloop > (frames - 1)) {
                                     endloop = ((frames - 1) - maxloop) + (endloop - frames);
@@ -8726,7 +8639,6 @@ apnde:
     x->looprecord       = looprecord;
     x->startloop        = startloop;
     x->endloop          = endloop;
-    x->startlow         = 0;    // ??
     x->overdubprev      = overdubamp;
     x->recendmark       = recendmark;
     x->append           = append;
