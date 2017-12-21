@@ -6,6 +6,9 @@ The karma~ object is a dynamically lengthed varispeed sample-recording and playb
 Version 1.1 (current public release):
 For the mac version (.mxo) there are 2 versions of the external included (along with the help file). The (b) version is the 32/64bit version that will run in any version of Max (versions 5 or 6 or 7, 32 or 64 bit). The non-b version is a purely 64-bit external. The features in both are the same. The windows version comes in the form of a 32-bit version (.mxe) and a 64-bit version (.mxe64).
 
+Version 1.4 (interim experimental build, do not use):
+OS X only. This experimental version adds feature requests and so, but was never intended for full public release. Here for comparison only.
+
 Version 1.5 (current development version, fully functional):
 OS X only for now, 32 & 64 bit UB (.mxo). Like version 1.4 - feature additions and bug fixes. Up to 4 channels operation, optional audio rate sync outlet (object arg #3 flag), state-machine added to data (list) outlet, etc.
 
