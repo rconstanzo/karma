@@ -2705,7 +2705,7 @@ apned:
                                     } else {
                                         maxloop = maxhead;
                                     }
-                                    break;                  // !! maybe no break here ??
+//                                  break;                  // !! maybe no break here ??
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
@@ -2741,7 +2741,7 @@ apned:
                                 } else {
                                     maxloop = maxhead;
                                 }
-                                break;                      // !! maybe no break here ??
+//                              break;                      // !! maybe no break here ??
                             case 2:
                                 record = looprecord = 0;
                                 triginit = 1;
@@ -3820,7 +3820,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         } else {
                                             maxloop = maxhead;
                                         }
-                                        break;                      // !! maybe no break here ??
+//                                      break;                      // !! maybe no break here ??
                                     case 2:
                                         record = looprecord = 0;
                                         triginit = 1;
@@ -3856,7 +3856,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     } else {
                                         maxloop = maxhead;
                                     }
-                                    break;                      // !! maybe no break here ??
+//                                  break;                      // !! maybe no break here ??
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
@@ -4659,7 +4659,7 @@ apnde:
                                         } else {
                                             maxloop = maxhead;
                                         }
-                                        break;                      // !! maybe no break here ??
+//                                      break;                      // !! maybe no break here ??
                                     case 2:
                                         record = looprecord = 0;
                                         triginit = 1;
@@ -4695,7 +4695,7 @@ apnde:
                                     } else {
                                         maxloop = maxhead;
                                     }
-                                    break;                      // !! maybe no break here ??
+//                                  break;                      // !! maybe no break here ??
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
@@ -5931,7 +5931,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         } else {
                                             maxloop = maxhead;
                                         }
-                                        break;                      // !! maybe no break here ??
+//                                      break;                      // !! maybe no break here ??
                                     case 2:
                                         record = looprecord = 0;
                                         triginit = 1;
@@ -5967,7 +5967,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     } else {
                                         maxloop = maxhead;
                                     }
-                                    break;                      // !! maybe no break here ??
+//                                  break;                      // !! maybe no break here ??
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
@@ -6910,7 +6910,7 @@ apden:
                                         } else {
                                             maxloop = maxhead;
                                         }
-                                        break;              // !! maybe no break here ??
+//                                      break;              // !! maybe no break here ??
                                     case 2:
                                         record = looprecord = 0;
                                         triginit = 1;
@@ -6946,7 +6946,7 @@ apden:
                                     } else {
                                         maxloop = maxhead;
                                     }
-                                    break;                  // !! maybe no break here ??
+//                                  break;                  // !! maybe no break here ??
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
@@ -7823,7 +7823,7 @@ apdne:
                                         } else {
                                             maxloop = maxhead;
                                         }
-                                        break;                  // !! maybe no break here ??
+//                                      break;                  // !! maybe no break here ??
                                     case 2:
                                         record = looprecord = 0;
                                         triginit = 1;
@@ -7859,7 +7859,7 @@ apdne:
                                     } else {
                                         maxloop = maxhead;
                                     }
-                                    break;                      // !! maybe no break here ??
+//                                  break;                      // !! maybe no break here ??
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
@@ -8674,7 +8674,7 @@ apnde:
                                         } else {
                                             maxloop = maxhead;
                                         }
-                                        break;                  // !! maybe no break here ??
+//                                      break;                  // !! maybe no break here ??
                                     case 2:
                                         record = looprecord = 0;
                                         triginit = 1;
@@ -8710,7 +8710,7 @@ apnde:
                                     } else {
                                         maxloop = maxhead;
                                     }
-                                    break;                      // !! maybe no break here ??
+//                                  break;                      // !! maybe no break here ??
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
