@@ -126,7 +126,7 @@ typedef struct _karma {
 
     long    syncoutlet;     // make sync outlet ? (object arg #3: 0/1 flag) <<-- TODO: switch to private @ttribute instead
 //  long    boffset;        // zero indexed buffer channel # (default 0), user settable, not buffer~ queried -->> TODO
-//  long    moduloout;      // modulo playback channel outputs flag, user settable, not buffer~ queried -->> TODO
+    long    moduloout;      // modulo playback channel outputs flag, user settable, not buffer~ queried -->> TODO
     long    islooped;       // can disable/enable global looping status (rodrigo @ttribute request, TODO) (!! long ??)
 
     t_ptr_int   bframes;    // # of buffer frames (stereo has 2 samples per frame, etc.)
@@ -137,8 +137,8 @@ typedef struct _karma {
     t_ptr_int   recordhead; // record head position in samples
     t_ptr_int   minloop;    // the minimum point in loop so far that has been requested as start point (in samples), is static value
     t_ptr_int   maxloop;    // the overall loop length recorded so far (in samples), is static value
-    t_ptr_int   startloop;  // playback start position (in buffer~) of recorded loop in samples, can change depending on wraparound selection logic
-    t_ptr_int   endloop;    // playback end position (in buffer~) of recorded loop in samples, can change depending on wraparound selection logic
+    t_ptr_int   startloop;  // playback start position (in buffer~) in samples, changes depending on loop points and selection logic
+    t_ptr_int   endloop;    // playback end position (in buffer~) in samples, changes depending on loop points and selection logic
     t_ptr_int   pokesteps;  // number of steps (samples) to keep track of in ipoke~ linear averaging scheme
     t_ptr_int   recordfade; // fade counter for recording in samples
     t_ptr_int   playfade;   // fade counter for playback in samples
@@ -164,7 +164,7 @@ typedef struct _karma {
     t_bool  recordalt;      // ("rectoo") ARGH ?? !! flag that selects between different types of recording for statecontrol (but what?!) ??
     t_bool  append;         // append flag ??
     t_bool  triginit;       // flag to show trigger start of initial-loop creation (?)
-    t_bool  wrapflag;       // flag to show if a loop wraps around the buffer~ end / beginning
+    t_bool  wrapflag;       // flag to show if a window selection wraps around the buffer~ end / beginning
     t_bool  jumpflag;       // whether jump is 'on' or 'off' (flag to block jumps from coming too soon ??)
 
     t_bool  recordinit;     // initial recording ("...flag to determine whether to apply the 'record' message to initial loop recording or not")
@@ -198,7 +198,7 @@ void        karma_overdub(t_karma *x, double amplitude);
 void        karma_select_size(t_karma *x, double duration);
 //void      karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv);
 void        karma_setloop(t_karma *x, t_symbol *s, short ac, t_atom *av);
-//void      karma_loop_multiply(t_karma *x, double multiplier);
+//void      karma_loop_multiply(t_karma *x, double multiplier); // <<-- TODO
 
 void        karma_buf_setup(t_karma *x, t_symbol *s);
 void        karma_buf_modset(t_karma *x, t_buffer_obj *b);
@@ -206,7 +206,7 @@ void        karma_clock_list(t_karma *x);
 //void      karma_buf_values_internal(t_karma *x, double low, double high, long loop_points_flag, t_bool caller);
 //void      karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv);
 void        karma_buf_change(t_karma *x, t_symbol *s, short ac, t_atom *av);
-//void      karma_offset(t_karma *x, long channeloffset);   <<-- TODO
+//void      karma_offset(t_karma *x, long channeloffset);   // <<-- TODO
 
 void        karma_jump(t_karma *x, double jumpposition);
 void        karma_append(t_karma *x);
@@ -448,7 +448,7 @@ void ext_main(void *r)
     // @method jump @digest jump location
     // @description jump location (in normalised segment length 0..1) <br />
     // @marg 0 @name phase_location @optional 0 @type float
-    class_addmethod(c, (method)karma_jump,          "jump",     A_FLOAT,    0);//karma_select_multiply
+    class_addmethod(c, (method)karma_jump,          "jump",     A_FLOAT,    0);
     // @method stop @digest stop transport
     // @description stops internal transport immediately <br />
     class_addmethod(c, (method)karma_stop,          "stop",                 0);
@@ -467,14 +467,14 @@ void ext_main(void *r)
 //  class_addmethod(c, (method)karma_loop_multiply, "multiply", A_FLOAT,    0);     // !! TODO
     // @method setloop @digest set <o>karma~</o> loop points (not 'window')
     // @description points (start/end) for setting <o>karma~</o> loop in selected buffer~ (not 'window') <br />
-    // "setloop" with no args sets loop to entire buffer~ length
+    // "setloop" with no args sets loop to entire buffer~ length <br />
     // @marg 0 @name loop_start_point @optional 1 @type float
     // @marg 1 @name loop_end_point @optional 1 @type float
     // @marg 2 @name points_type @optional 1 @type symbol
     class_addmethod(c, (method)karma_setloop,       "setloop",  A_GIMME,    0);
     // @method set @digest set (new) buffer
     // @description set (new) buffer for recording or playback, can switch buffers in realtime <br />
-    // "set buffer_name" with no other args sets (new) buffer~ and (re)sets loop points to entire buffer~ length
+    // "set buffer_name" with no other args sets (new) buffer~ and (re)sets loop points to entire buffer~ length <br />
     // @marg 0 @name buffer_name @optional 0 @type symbol
     // @marg 1 @name loop_start_point @optional 1 @type float
     // @marg 2 @name loop_end_point @optional 1 @type float
@@ -487,7 +487,7 @@ void ext_main(void *r)
     // @method overdub @digest overdubbing amplitude
     // @description amplitude (0..1) for when in overdubbing state <br />
     // @marg 0 @name overdub @optional 0 @type float
-    class_addmethod(c, (method)karma_overdub,       "overdub",  A_FLOAT,    0);     // !! A_GIMME ??
+    class_addmethod(c, (method)karma_overdub,       "overdub",  A_FLOAT,    0);     // !! A_GIMME ?? (for amplitude + smooth time)
     
     class_addmethod(c, (method)karma_dsp64,         "dsp64",    A_CANT,     0);
     class_addmethod(c, (method)karma_assist,        "assist",   A_CANT,     0);
@@ -521,17 +521,17 @@ void ext_main(void *r)
     CLASS_ATTR_LABEL(c, "interp", 0, "Playback Interpolation");
     // @description Type of <b>interpolation</b> used in audio playback. Default <b>Cubic</b> <br />
 /*
-    CLASS_ATTR_LONG(c, "syncout", 0, t_karma, syncout);         // !! TODO !!
+    CLASS_ATTR_LONG(c, "syncout", 0, t_karma, syncoutlet);      // !! TODO !!
     CLASS_ATTR_FILTER_CLIP(c, "syncout", 0, 1);
     CLASS_ATTR_INVISIBLE(c, "syncout", 0);                      // do not expose to user, only callable as instantiation attribute
     //CLASS_ATTR_LABEL(c, "syncout", 0, "Create audio rate Sync Outlet no / yes");
     // @description Set as <m>integer</m> flag <b>0</b> or <b>1</b>. With <m>syncout</m> switched on, <o>karma~</o> will add an additional audio signal outlet to the object, after the audio outs and before the final data outlet. This outlet is an audio rate sync signal 0..1 for audio rate synchronous matching to other MSP processes. With <m>syncout</m> switched off (the default), <o>karma~</o> will have no additional outlets. This attribute cannot be sent to the object dynamically or changed in the inspector - it is only available at instantiation time. <br />
-*/
+
     CLASS_ATTR_LONG(c, "loop", 0, t_karma, islooped);           // !! TODO !!
     CLASS_ATTR_FILTER_CLIP(c, "loop", 0, 1);
     CLASS_ATTR_LABEL(c, "loop", 0, "Loop off / on");
     // @description Set as <m>integer</m> flag <b>0</b> or <b>1</b>. With <m>loop</m> switched on, <o>karma~</o> acts as a nornal looper, looping playback and/or recording depending on the state machine. With <m>loop</m> switched off, <o>karma~</o> will only play or record in oneshots. Default <b>On (1)</b> <br />
-/*
+
     CLASS_ATTR_LONG(c, "modout", 0, t_karma, moduloout);        // !! TODO !!
     CLASS_ATTR_FILTER_CLIP(c, "modout", 0, 1);
     CLASS_ATTR_LABEL(c, "modout", 0, "Modulo playback channel outputs off / on");
@@ -553,8 +553,8 @@ void ext_main(void *r)
     post("-- karma~:");
     post("version 1.5 beta");
     post("designed by Rodrigo Constanzo");
-    post("original version to 1.4 developed and coded by raja");
-    post("1.5 updates coded by pete");
+    post("original version to 1.4 developed by raja");
+    post("1.5 updates by pete");
     post("--");
 }
 
@@ -844,7 +844,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
     x->maxloop = x->endloop = high * bframesm1;
 
     // update selection only if no additional args (min/max low/high) <<-- NO !! (always update)
-    karma_select_size(x, x->selection);                             // !! ordering ??
+    karma_select_size(x, x->selection);
     karma_select_start(x, x->selstart);
     //karma_select_internal(x, x->selstart, x->selection);
 
@@ -858,7 +858,6 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
     t_buffer_obj *buf_temp;
     t_symbol *b;
     t_symbol *b_temp = 0;
-    //long buffer_exists;
     t_symbol *loop_points_sym = 0;
     long loop_points_flag;              // specify start/end loop points: 0 = in phase, 1 = in samples, 2 = in milliseconds (default)
     double templow, temphigh, temphightemp;
@@ -886,13 +885,13 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
         else                            // this should never get called here ??
             buffer_ref_set(x->buf_temp, b_temp);
         
-        //buffer_exists = buffer_ref_exists(x->buf_temp);
         buf_temp        = buffer_ref_getobject(x->buf_temp);
         
         if (buf_temp == NULL) {
             
             object_warn((t_object *)x, "cannot find any buffer~ named %s, ignoring", b_temp->s_name);
             x->buf_temp = 0;            // should dspfree the temp buffer here ??
+            object_free(x->buf_temp);   // ... ??
             return;
 
         } else {
@@ -907,12 +906,11 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
             
             if (!x->buf) {
                 x->buf = buffer_ref_new((t_object *)x, b);
-                //x->directionorig = 0;
             } else {
                 buffer_ref_set(x->buf, b);
             }
 
-            //buf = buffer_ref_getobject(x->buf);   // no need in this method ??
+            //buf = buffer_ref_getobject(x->buf);   // no need in this method
 
             // !! if just "set [buffername]" with no additional args and [buffername]...
             // ...already set, message will reset loop points to min / max !!
@@ -921,18 +919,10 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
             temphigh = -1.0;
 
     // ..... do it .....
-/*
-            if (x->stopallowed == 0) {      // these should only be (re)set here if karma~ not currently playing ??
-                x->directionorig = 0;
-                x->maxhead = x->playhead = 0.0;
-            } else {
-                x->maxhead = x->playhead;   // !! we want a 'takeover' mode...
-            }
-            x->recordhead = -1;
-*/
+
             // ... obviously pete is a bit confused about all this ...
             x->directionorig = 0;
-            x->maxhead = x->playhead = 0.0; // x->maxhead = x->playhead;
+            x->maxhead = x->playhead = 0.0; // x->maxhead = x->playhead;    // ?? ('takeover')
             x->recordhead = -1;
 
             // maximum length message (4[6] atoms after 'set') = " set ...
@@ -970,16 +960,13 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
                     temphigh = atom_getfloat(argv + 2);
                     if (temphigh < 0.) {
                         object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
-                        //temphigh = 0.;
                     }   // !! do maximum check in karma_buf_values_internal !!
                 } else if (atom_gettype(argv + 2) == A_LONG) {
                     temphigh = (double)atom_getlong(argv + 2);
                     if (temphigh < 0.) {
                         object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
-                        //temphigh = 0.;
                     }   // !! do maximum check in karma_buf_values_internal !!
                 } else if ( (atom_gettype(argv + 2) == A_SYM) && (argc < 4) ) {
-                    //temphigh = -1.;
                     loop_points_sym = atom_getsym(argv + 2);
                     if (loop_points_sym == ps_dummy)    // !! "dummy" is silent++, move on...
                         loop_points_flag = 2;
@@ -994,7 +981,6 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
                         loop_points_flag = 2;
                     }
                 } else {
-                    //temphigh = -1.;
                     object_warn((t_object *) x, "%s message does not understand arg no.3, setting unit to maximum", s->s_name);
                 }
             }
@@ -1032,8 +1018,6 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
                     else
                         object_warn((t_object *) x, "%s message does not understand arg no.2, setting loop points to minimum (and maximum)", s->s_name);
                 } else {
-                    //temphigh = -1.;                   // !! no - leave temphigh alone in case only arg #2 is an error
-                    //templow = -1.;
                     object_warn((t_object *) x, "%s message does not understand arg no.2, setting loop points to minimum (and maximum)", s->s_name);
                 }
                 
@@ -1081,7 +1065,7 @@ void karma_buf_change(t_karma *x, t_symbol *s, short ac, t_atom *av)    // " set
             store_av[i] = av[i];
         }
 
-    } else {                        // this is a shame, how do i pass a t_atom without knowing # of atoms ?
+    } else {                        // ?? how do i pass a t_atom without knowing # of atoms ??
         
         for (i = 0; i < a; i++) {
             store_av[i] = av[i];
@@ -1147,16 +1131,13 @@ void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)  
             temphigh = atom_getfloat(argv + 1);
             if (temphigh < 0.) {
                 object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
-                //temphigh = 0.;
             }   // !! do maximum check in karma_buf_values_internal !!
         } else if (atom_gettype(argv + 1) == A_LONG) {
             temphigh = (double)atom_getlong(argv + 1);
             if (temphigh < 0.) {
                 object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
-                //temphigh = 0.;
             }   // !! do maximum check in karma_buf_values_internal !!
         } else if ( (atom_gettype(argv + 1) == A_SYM) && (argc < 3) ) {
-            //temphigh = -1.;
             loop_points_sym = atom_getsym(argv + 1);
             if ( (loop_points_sym == ps_phase) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )// phase
                 loop_points_flag = 0;
@@ -1169,7 +1150,6 @@ void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)  
                 loop_points_flag = 2;
             }
         } else {
-            //temphigh = -1.;
             object_warn((t_object *) x, "%s message does not understand arg no.2, setting unit to maximum", s->s_name);
         }
     }
@@ -1201,8 +1181,6 @@ void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)  
                 }   // !! do maximum check in karma_buf_values_internal !!
             }
         } else {
-            //temphigh = -1.;               // !! no - leave temphigh alone in case only arg #2 is an error
-            //templow = -1.;
             object_warn((t_object *) x, "%s message does not understand arg no.1, resetting loop point", s->s_name);
         }
         
@@ -1217,7 +1195,7 @@ void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)  
 
 void karma_setloop(t_karma *x, t_symbol *s, short ac, t_atom *av)   // " setloop ..... "
 {
-    defer(x, (method)karma_setloop_internal, s, ac, av);            // main method   // does not have to be defered ??
+    defer(x, (method)karma_setloop_internal, s, ac, av);            // main method   // not defered ??
 }
 /*
 void karma_clock_list(t_karma *x)
@@ -1254,60 +1232,17 @@ void karma_clock_list(t_karma *x)
     }
 }
 */
-/*
-void karma_clock_list(t_karma *x)
-{
-    if (x->reportlist > 0)    // ('reportlist 0' == off, else milliseconds)
-    {
-        t_ptr_int frames        = x->bframes - 1;
-        t_ptr_int endloop       = x->endloop;
-        t_ptr_int startloop     = x->startloop;
-        t_ptr_int maxloop       = x->maxloop;
-        t_ptr_int directflag    = x->directionorig < 0;
-        
-        t_bool record   = x->record;
-        t_bool go       = x->go;
-        
-        char statehuman = x->statehuman;
-        
-        double bmsr         = x->bmsr;
-        double playhead     = x->playhead;
-        double selection    = x->selection;
-        double endmax, startendsize, normalisedposition;
-        
-        endmax              = MAX(endloop, maxloop);
-        startendsize        = endmax - startloop;
-        normalisedposition  = CLAMP( directflag ? ((playhead-(frames - startendsize))/startendsize) : ((playhead-startloop)/startendsize), 0., 1. );
-        
-        t_atom datalist[7];                                     // !! reverse logics are wrong ??
-        atom_setfloat(  datalist + 0,    normalisedposition                 );                                  // position float normalised 0..1
-        atom_setlong(   datalist + 1,    go         );                                                          // play flag int    // pointless
-        atom_setlong(   datalist + 2,    record     );                                                          // record flag int  // pointless
-        atom_setfloat(  datalist + 3, (  directflag ? ((frames - startendsize) / bmsr) : (startloop / bmsr) ) );// start float ms   // ??
-        atom_setfloat(  datalist + 4, (  directflag ? (frames / bmsr) : (endloop / bmsr) )                    );// end float ms     // ?? (endmax ??)
-        atom_setfloat(  datalist + 5, ( (selection * startendsize) / bmsr)  );                                  // window float ms  // ?? (endmax ??)
-        atom_setlong(   datalist + 6,    statehuman );                                                          // state flag int
-
-        outlet_list(x->messout, 0L, 7, datalist);
-//      outlet_list(x->messout, gensym("list"), 7, datalist);
-        
-        if (sys_getdspstate() && (x->reportlist > 0)) {         // '&& (x->reportlist > 0)' ??
-            clock_delay(x->tclock, x->reportlist);
-        }
-    }
-}
-*/
 
 void karma_clock_list(t_karma *x)
 {
-    if (x->reportlist > 0)    // ('reportlist 0' == off, else milliseconds)
+    if (x->reportlist > 0)      // ('reportlist 0' == off, else milliseconds)
     {
         t_ptr_int frames        = x->bframes - 1;
-        //t_ptr_int endloop       = x->endloop;
-        //t_ptr_int startloop     = x->startloop;
+//      t_ptr_int endloop       = x->endloop;
+//      t_ptr_int startloop     = x->startloop;
         t_ptr_int minloop       = x->minloop;
         t_ptr_int maxloop       = x->maxloop;
-        t_ptr_int directflag    = x->directionorig < 0; // !! reverse = 1, forward = 0
+        t_ptr_int directflag    = x->directionorig < 0;         // !! reverse = 1, forward = 0
         
         t_bool record   = x->record;
         t_bool go       = x->go;
@@ -1323,13 +1258,13 @@ void karma_clock_list(t_karma *x)
         normalisedposition  = CLAMP( directflag ? ((playhead-(frames-setloopsize))/setloopsize) : ((playhead-minloop)/setloopsize), 0., 1. );
         
         t_atom datalist[7];                                     // !! reverse logics are wrong ??
-        atom_setfloat(  datalist + 0,    normalisedposition                     );                                  // position float normalised 0..1
-        atom_setlong(   datalist + 1,    go         );                                                              // play flag int    // pointless
-        atom_setlong(   datalist + 2,    record     );                                                              // record flag int  // pointless
-        atom_setfloat(  datalist + 3, (  directflag ? ((frames - setloopsize) / bmsr) : (minloop / bmsr) )  );      // start float ms   // ??
-        atom_setfloat(  datalist + 4, (  directflag ? (frames / bmsr) : ((maxloop + 1) / bmsr) )            );      // end float ms     // ??
-        atom_setfloat(  datalist + 5, ( (selection * (setloopsize + 1)) / bmsr) );                                  // window float ms  // ??
-        atom_setlong(   datalist + 6,    statehuman );                                                              // state flag int
+        atom_setfloat(  datalist + 0,    normalisedposition                     );                              // position float normalised 0..1
+        atom_setlong(   datalist + 1,    go         );                                                          // play flag int    // pointless
+        atom_setlong(   datalist + 2,    record     );                                                          // record flag int  // pointless
+        atom_setfloat(  datalist + 3, (  directflag ? ((frames - setloopsize) / bmsr) : (minloop / bmsr) )  );  // start float ms   // ??
+        atom_setfloat(  datalist + 4, (  directflag ? (frames / bmsr) : ((maxloop + 1) / bmsr) )            );  // end float ms     // ??
+        atom_setfloat(  datalist + 5, ( (selection * (setloopsize + 1)) / bmsr) );                              // window float ms  // ??
+        atom_setlong(   datalist + 6,    statehuman );                                                          // state flag int
         
         outlet_list(x->messout, 0L, 7, datalist);
 //      outlet_list(x->messout, gensym("list"), 7, datalist);
@@ -1401,10 +1336,12 @@ void karma_select_internal(t_karma *x, double selectionstart, double selectionle
     t_ptr_int bfrmaesminusone;
     double setloopsize;
 
-    double minsampsnorm = x->vsnorm * 0.2;          // 1/5th of vectorsize samples minimum as normalised value  // !! buffer sr ??
+    double minsampsnorm = x->vsnorm * 0.5;          // half vectorsize samples minimum as normalised value  // !! buffer sr ??
     x->selstart = selectionstart;
     x->selection = (selectionlength < minsampsnorm) ? minsampsnorm : selectionlength;     // !! TODO: check
-    
+
+    // for dealing with selection-out-of-bounds logic:
+
     if (!x->looprecord)
     {
         setloopsize = x->maxloop - x->minloop;
@@ -1420,7 +1357,7 @@ void karma_select_internal(t_karma *x, double selectionstart, double selectionle
                 x->endloop = (bfrmaesminusone - setloopsize) + (x->endloop - bfrmaesminusone);
                 x->wrapflag = 1;
             } else {
-                x->wrapflag = 0;    // <<-- normal
+                x->wrapflag = 0;    // selection-in-bounds
             }
             
         } else {                    // if originally forwards
@@ -1432,14 +1369,13 @@ void karma_select_internal(t_karma *x, double selectionstart, double selectionle
                 x->endloop = x->endloop - setloopsize;
                 x->wrapflag = 1;
             } else {
-                x->wrapflag = 0;    // <<-- normal
+                x->wrapflag = 0;    // selection-in-bounds
             }
             
         }
     }
 }
-*/
-/*
+
 void karma_select_start(t_karma *x, double positionstart)
 {
     karma_select_internal(x, positionstart, x->selection);
@@ -1455,7 +1391,7 @@ void karma_select_start(t_karma *x, double positionstart)   // positionstart = "
     t_ptr_int bfrmaesminusone, setloopsize;
     x->selstart = positionstart;
     
-    // only for dealing with selection-out-of-bounds logic:
+    // for dealing with selection-out-of-bounds logic:
     
     if (!x->looprecord)
     {
@@ -1464,27 +1400,27 @@ void karma_select_start(t_karma *x, double positionstart)   // positionstart = "
         if (x->directionorig < 0)   // if originally in reverse
         {
             bfrmaesminusone = x->bframes - 1;
-                                    // (bfrmaesminusone - x->maxloop) + (x->selstart * x->maxloop)	// ??
-            x->startloop = CLAMP( (bfrmaesminusone - setloopsize) + (x->selstart * setloopsize), bfrmaesminusone - x->maxloop, bfrmaesminusone );
+                                    // !! N.B. (bfrmaesminusone - "x->maxloop")
+            x->startloop = CLAMP( (bfrmaesminusone - x->maxloop) + (positionstart * setloopsize), bfrmaesminusone - x->maxloop, bfrmaesminusone );
             x->endloop = x->startloop + (x->selection * x->maxloop);
             
             if (x->endloop > bfrmaesminusone) {
                 x->endloop = (bfrmaesminusone - setloopsize) + (x->endloop - bfrmaesminusone);
                 x->wrapflag = 1;
             } else {
-                x->wrapflag = 0;    // <<-- normal
+                x->wrapflag = 0;    // selection-in-bounds
             }
             
         } else {                    // if originally forwards
-            
-            x->startloop = CLAMP( positionstart * setloopsize, x->minloop, x->maxloop );    // positionstart * x->maxloop	// ??
+
+            x->startloop = CLAMP( ((positionstart * setloopsize) + x->minloop), x->minloop, x->maxloop );   // no need for CLAMP ??
             x->endloop = x->startloop + (x->selection * setloopsize);
             
             if (x->endloop > x->maxloop) {
                 x->endloop = x->endloop - setloopsize;
                 x->wrapflag = 1;
             } else {
-                x->wrapflag = 0;    // <<-- normal
+                x->wrapflag = 0;    // selection-in-bounds
             }
             
         }
@@ -1498,7 +1434,7 @@ void karma_select_size(t_karma *x, double duration) // duration = "window" float
     double minsampsnorm = x->vsnorm * 0.5;          // half vectorsize samples minimum as normalised value  // !! buffer sr ??
     x->selection = (duration < minsampsnorm) ? minsampsnorm : duration;     // !! TODO: check
     
-    // only for dealing with selection-out-of-bounds logic:
+    // for dealing with selection-out-of-bounds logic:
     
     if (!x->looprecord)
     {
@@ -1513,7 +1449,7 @@ void karma_select_size(t_karma *x, double duration) // duration = "window" float
                 x->endloop = (bfrmaesminusone - setloopsize) + (x->endloop - bfrmaesminusone);
                 x->wrapflag = 1;
             } else {
-                x->wrapflag = 0;    // <<-- normal
+                x->wrapflag = 0;    // selection-in-bounds
             }
             
         } else {                    // if originally forwards
@@ -1522,7 +1458,7 @@ void karma_select_size(t_karma *x, double duration) // duration = "window" float
                 x->endloop = x->endloop - setloopsize;
                 x->wrapflag = 1;
             } else {
-                x->wrapflag = 0;    // <<-- normal
+                x->wrapflag = 0;    // selection-in-bounds
             }
             
         }
@@ -2034,7 +1970,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         {
                             maxloop = CLAMP(maxhead, 4096, frames - 1);
                             setloopsize = maxloop - minloop;
-                            accuratehead = startloop = minloop + (selstart * setloopsize);  // ... minloop +  ...   // ??
+                            accuratehead = startloop = minloop + (selstart * setloopsize);
                             endloop = startloop + (selection * setloopsize);
                             if (endloop > maxloop) {
                                 endloop = endloop - (setloopsize + 1);
@@ -2069,11 +2005,11 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         snrfade = 0.0;
                         triginit = 0;
                         append = recordalt = recendmark = 0;
-                    } else {    // jump / play
+                    } else {    // jump / play (inside 'window')
                         setloopsize = maxloop - minloop;
-                        if (jumpflag)       // setloopsize <- -> maxloop ??
-                            accuratehead = (directionorig >= 0) ? (jumphead * setloopsize) : (((frames - 1) - maxloop) + (jumphead * setloopsize));
-                        else                                                        // ((frames - 1) - setloopsize - minloop) // ??
+                        if (jumpflag)
+                            accuratehead = (directionorig >= 0) ? ((jumphead * setloopsize) + minloop) : (((frames - 1) - maxloop) + (jumphead * setloopsize));
+                        else
                             accuratehead = (direction < 0) ? endloop : startloop;
                         if (record) {
                             if (globalramp) {
@@ -2107,7 +2043,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         {
                             if (accuratehead > maxloop)
                             {
-                                accuratehead = accuratehead - maxloop;  // ??
+                                accuratehead = accuratehead - setloopsize;
                                 snrfade = 0.0;
                                 if (record) {
                                     if (globalramp) {
@@ -2173,7 +2109,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             } else if (directionorig >= 0) {
                                 if (accuratehead > maxloop)
                                 {
-                                    accuratehead = accuratehead - setloopsize;  // accuratehead - maxloop;  // fixed position ??
+                                    accuratehead = accuratehead - setloopsize;  // fixed position ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -2186,21 +2122,21 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 }
                                 else if (accuratehead < 0.0)
                                 {
-                                    accuratehead = maxloop + setloopsize;       // maxloop + accuratehead;  // fixed position ??
+                                    accuratehead = maxloop + setloopsize;       // !! this is surely completely wrong ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);           // 0.0  // ??
+                                            ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
                                         recordhead = -1;
                                     }
                                 }
-                            } else {
+                            } else {    // reverse
                                 if (accuratehead < ((frames - 1) - maxloop))
                                 {
-                                    accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...((frames - 1) - maxloop)... // ??
+                                    accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...- maxloop)... // ??
                                     snrfade = 0.0;
                                     if (record)
                                     {
@@ -2212,7 +2148,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         recordhead = -1;
                                     }
                                 } else if (accuratehead > (frames - 1)) {
-                                    accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ((frames - 1) - maxloop)...   // ??
+                                    accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...- maxloop)...   // ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -2224,7 +2160,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     }
                                 }
                             }
-                        } else {
+                        } else {    // (not wrapflag)
                             if ((accuratehead > endloop) || (accuratehead < startloop))
                             {
                                 accuratehead = (direction >= 0) ? startloop : endloop;
@@ -2251,7 +2187,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 } else {
                     frac = 0.0;
                 }                                                                                   // setloopsize  // ??
-                interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);     // find samp-indices 4 interp
+                interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);  // samp-indices for interp
                 
                 if (record) {              // if recording do linear-interp else...
                     osamp1 =    LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
@@ -2371,7 +2307,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                     }
                     b[recordhead * nchan] = writeval1;
                     recplaydif = (double)(playhead - recordhead);
-                    if (recplaydif > 0) {                     // linear-interpolation for speed > 1x
+                    if (recplaydif > 0) {               // linear-interpolation for speed > 1x
                         coeff1 = (recin1 - writeval1) / recplaydif;
                         for (i = recordhead + 1; i < playhead; i++) {
                             writeval1 += coeff1;
@@ -2629,12 +2565,12 @@ apned:
                     writeval1 += recin1;
                     pokesteps += 1.0;
                 } else {
-                    if (pokesteps > 1.0) {                      // linear-averaging for speed < 1x
+                    if (pokesteps > 1.0) {                          // linear-averaging for speed < 1x
                         writeval1 = writeval1 / pokesteps;
                         pokesteps = 1.0;
                     }
                     b[recordhead * nchan] = writeval1;
-                    recplaydif = (double)(playhead - recordhead);     // linear-interp for speed > 1x
+                    recplaydif = (double)(playhead - recordhead);   // linear-interp for speed > 1x
                     if (direction != directionorig)
                     {
                         if (directionorig >= 0)
@@ -3086,10 +3022,11 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startloop = (selstart * maxloop);    // !!
-                                endloop = startloop + (selection * maxloop);
+                                setloopsize = maxloop - minloop;
+                                accuratehead = startloop = minloop + (selstart * setloopsize);
+                                endloop = startloop + (selection * setloopsize);
                                 if (endloop > maxloop) {
-                                    endloop = endloop - (maxloop + 1);
+                                    endloop = endloop - (setloopsize + 1);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -3100,10 +3037,11 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop); // !!
-                                accuratehead = endloop = startloop + (selection * maxloop);
+                                setloopsize = maxloop - minloop;    // ((frames - 1) - setloopsize - minloop)   // ??
+                                startloop = ((frames - 1) - setloopsize) + (selstart * setloopsize);    // ((frames - 1) - maxloop) + (selstart * maxloop);   // ??
+                                accuratehead = endloop = startloop + (selection * setloopsize);         // startloop + (selection * maxloop);   ??
                                 if (endloop > (frames - 1)) {
-                                    endloop = ((frames - 1) - maxloop) + (endloop - frames);
+                                    endloop = ((frames - 1) - setloopsize) + (endloop - frames);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -3120,9 +3058,10 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             snrfade = 0.0;
                             triginit = 0;
                             append = recordalt = recendmark = 0;
-                        } else {    // jump / play
+                        } else {    // jump / play (inside 'window')
+                            setloopsize = maxloop - minloop;
                             if (jumpflag)
-                                accuratehead = (directionorig >= 0) ? (jumphead * maxloop) : (((frames - 1) - maxloop) + (jumphead * maxloop));
+                                accuratehead = (directionorig >= 0) ? ((jumphead * setloopsize) + minloop) : (((frames - 1) - maxloop) + (jumphead * setloopsize));
                             else
                                 accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
@@ -3137,9 +3076,11 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             triginit = 0;
                         }
                     } else {        // jump-based constraints (outside 'window')
+                        setloopsize = maxloop - minloop;
                         speedsrscaled = speed * srscale;
+                        
                         if (record)
-                            speedsrscaled = (fabs(speedsrscaled) > (maxloop / 1024)) ? ((maxloop / 1024) * direction) : speedsrscaled;
+                            speedsrscaled = (fabs(speedsrscaled) > (setloopsize / 1024)) ? ((setloopsize / 1024) * direction) : speedsrscaled;
                         accuratehead = accuratehead + speedsrscaled;
                         
                         if (jumpflag)
@@ -3155,7 +3096,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             {
                                 if (accuratehead > maxloop)
                                 {
-                                    accuratehead = accuratehead - maxloop;
+                                    accuratehead = accuratehead - setloopsize;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -3180,7 +3121,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             } else {
                                 if (accuratehead > (frames - 1))
                                 {
-                                    accuratehead = ((frames - 1) - maxloop) + (accuratehead - (frames - 1));
+                                    accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...((frames - 1) - maxloop)...   // ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -3191,7 +3132,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         recordhead = -1;
                                     }
                                 } else if (accuratehead < ((frames - 1) - maxloop)) {
-                                    accuratehead = (frames - 1) - (((frames - 1) - maxloop) - accuratehead);
+                                    accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...((frames - 1) - maxloop)... // ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -3221,7 +3162,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 } else if (directionorig >= 0) {
                                     if (accuratehead > maxloop)
                                     {
-                                        accuratehead = accuratehead - maxloop;
+                                        accuratehead = accuratehead - setloopsize;  // fixed position ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
@@ -3234,21 +3175,21 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     }
                                     else if (accuratehead < 0.0)
                                     {
-                                        accuratehead = maxloop + accuratehead;
+                                        accuratehead = maxloop + setloopsize;       // !! this is surely completely wrong ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, 0, -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
                                             recordhead = -1;
                                         }
                                     }
-                                } else {
+                                } else {    // reverse
                                     if (accuratehead < ((frames - 1) - maxloop))
                                     {
-                                        accuratehead = (frames - 1) - (((frames - 1) - maxloop) - accuratehead);
+                                        accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...- maxloop)... // ??
                                         snrfade = 0.0;
                                         if (record)
                                         {
@@ -3260,7 +3201,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                             recordhead = -1;
                                         }
                                     } else if (accuratehead > (frames - 1)) {
-                                        accuratehead = ((frames - 1) - maxloop) + (accuratehead - (frames - 1));
+                                        accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...- maxloop)...   // ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
@@ -3272,7 +3213,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         }
                                     }
                                 }
-                            } else {
+                            } else {    // (not wrapflag)
                                 if ((accuratehead > endloop) || (accuratehead < startloop))
                                 {
                                     accuratehead = (direction >= 0) ? startloop : endloop;
@@ -3299,7 +3240,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                     } else {
                         frac = 0.0;
                     }
-                    interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);     // find samp-indices 4 interp
+                    interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);  // samp-indices for interp
                     
                     if (record) {              // if recording do linear-interp else...
                         osamp1 =    LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
@@ -3985,10 +3926,11 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startloop = (selstart * maxloop);    // !!
-                                endloop = startloop + (selection * maxloop);
+                                setloopsize = maxloop - minloop;
+                                accuratehead = startloop = minloop + (selstart * setloopsize);
+                                endloop = startloop + (selection * setloopsize);
                                 if (endloop > maxloop) {
-                                    endloop = endloop - (maxloop + 1);
+                                    endloop = endloop - (setloopsize + 1);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -3999,10 +3941,11 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop); // !!
-                                accuratehead = endloop = startloop + (selection * maxloop);
+                                setloopsize = maxloop - minloop;    // ((frames - 1) - setloopsize - minloop)   // ??
+                                startloop = ((frames - 1) - setloopsize) + (selstart * setloopsize);    // ((frames - 1) - maxloop) + (selstart * maxloop);   // ??
+                                accuratehead = endloop = startloop + (selection * setloopsize);         // startloop + (selection * maxloop);   ??
                                 if (endloop > (frames - 1)) {
-                                    endloop = ((frames - 1) - maxloop) + (endloop - frames);
+                                    endloop = ((frames - 1) - setloopsize) + (endloop - frames);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -4019,9 +3962,10 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             snrfade = 0.0;
                             triginit = 0;
                             append = recordalt = recendmark = 0;
-                        } else {    // jump / play
+                        } else {    // jump / play (inside 'window')
+                            setloopsize = maxloop - minloop;
                             if (jumpflag)
-                                accuratehead = (directionorig >= 0) ? (jumphead * maxloop) : (((frames - 1) - maxloop) + (jumphead * maxloop));
+                                accuratehead = (directionorig >= 0) ? ((jumphead * setloopsize) + minloop) : (((frames - 1) - maxloop) + (jumphead * setloopsize));
                             else
                                 accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
@@ -4036,9 +3980,11 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             triginit = 0;
                         }
                     } else {        // jump-based constraints (outside 'window')
+                        setloopsize = maxloop - minloop;
                         speedsrscaled = speed * srscale;
+                        
                         if (record)
-                            speedsrscaled = (fabs(speedsrscaled) > (maxloop / 1024)) ? ((maxloop / 1024) * direction) : speedsrscaled;
+                            speedsrscaled = (fabs(speedsrscaled) > (setloopsize / 1024)) ? ((setloopsize / 1024) * direction) : speedsrscaled;
                         accuratehead = accuratehead + speedsrscaled;
                         
                         if (jumpflag)
@@ -4054,7 +4000,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             {
                                 if (accuratehead > maxloop)
                                 {
-                                    accuratehead = accuratehead - maxloop;
+                                    accuratehead = accuratehead - setloopsize;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -4079,7 +4025,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             } else {
                                 if (accuratehead > (frames - 1))
                                 {
-                                    accuratehead = ((frames - 1) - maxloop) + (accuratehead - (frames - 1));
+                                    accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...((frames - 1) - maxloop)...   // ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -4090,7 +4036,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         recordhead = -1;
                                     }
                                 } else if (accuratehead < ((frames - 1) - maxloop)) {
-                                    accuratehead = (frames - 1) - (((frames - 1) - maxloop) - accuratehead);
+                                    accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...((frames - 1) - maxloop)... // ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -4120,7 +4066,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 } else if (directionorig >= 0) {
                                     if (accuratehead > maxloop)
                                     {
-                                        accuratehead = accuratehead - maxloop;
+                                        accuratehead = accuratehead - setloopsize;  // fixed position ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
@@ -4133,21 +4079,21 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     }
                                     else if (accuratehead < 0.0)
                                     {
-                                        accuratehead = maxloop + accuratehead;
+                                        accuratehead = maxloop + setloopsize;       // !! this is surely completely wrong ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, 0, -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
                                             recordhead = -1;
                                         }
                                     }
-                                } else {
+                                } else {    // reverse
                                     if (accuratehead < ((frames - 1) - maxloop))
                                     {
-                                        accuratehead = (frames - 1) - (((frames - 1) - maxloop) - accuratehead);
+                                        accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...- maxloop)... // ??
                                         snrfade = 0.0;
                                         if (record)
                                         {
@@ -4159,7 +4105,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                             recordhead = -1;
                                         }
                                     } else if (accuratehead > (frames - 1)) {
-                                        accuratehead = ((frames - 1) - maxloop) + (accuratehead - (frames - 1));
+                                        accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...- maxloop)...   // ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
@@ -4171,7 +4117,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         }
                                     }
                                 }
-                            } else {
+                            } else {    // (not wrapflag)
                                 if ((accuratehead > endloop) || (accuratehead < startloop))
                                 {
                                     accuratehead = (direction >= 0) ? startloop : endloop;
@@ -5049,10 +4995,11 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startloop = (selstart * maxloop);    // !!
-                                endloop = startloop + (selection * maxloop);
+                                setloopsize = maxloop - minloop;
+                                accuratehead = startloop = minloop + (selstart * setloopsize);
+                                endloop = startloop + (selection * setloopsize);
                                 if (endloop > maxloop) {
-                                    endloop = endloop - (maxloop + 1);
+                                    endloop = endloop - (setloopsize + 1);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -5063,10 +5010,11 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop); // !!
-                                accuratehead = endloop = startloop + (selection * maxloop);
+                                setloopsize = maxloop - minloop;    // ((frames - 1) - setloopsize - minloop)   // ??
+                                startloop = ((frames - 1) - setloopsize) + (selstart * setloopsize);    // ((frames - 1) - maxloop) + (selstart * maxloop);   // ??
+                                accuratehead = endloop = startloop + (selection * setloopsize);         // startloop + (selection * maxloop);   ??
                                 if (endloop > (frames - 1)) {
-                                    endloop = ((frames - 1) - maxloop) + (endloop - frames);
+                                    endloop = ((frames - 1) - setloopsize) + (endloop - frames);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -5083,9 +5031,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             snrfade = 0.0;
                             triginit = 0;
                             append = recordalt = recendmark = 0;
-                        } else {    // jump / play
+                        } else {    // jump / play (inside 'window')
+                            setloopsize = maxloop - minloop;
                             if (jumpflag)
-                                accuratehead = (directionorig >= 0) ? (jumphead * maxloop) : (((frames - 1) - maxloop) + (jumphead * maxloop));
+                                accuratehead = (directionorig >= 0) ? ((jumphead * setloopsize) + minloop) : (((frames - 1) - maxloop) + (jumphead * setloopsize));
                             else
                                 accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
@@ -5100,9 +5049,11 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             triginit = 0;
                         }
                     } else {        // jump-based constraints (outside 'window')
+                        setloopsize = maxloop - minloop;
                         speedsrscaled = speed * srscale;
+                        
                         if (record)
-                            speedsrscaled = (fabs(speedsrscaled) > (maxloop / 1024)) ? ((maxloop / 1024) * direction) : speedsrscaled;
+                            speedsrscaled = (fabs(speedsrscaled) > (setloopsize / 1024)) ? ((setloopsize / 1024) * direction) : speedsrscaled;
                         accuratehead = accuratehead + speedsrscaled;
                         
                         if (jumpflag)
@@ -5118,7 +5069,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             {
                                 if (accuratehead > maxloop)
                                 {
-                                    accuratehead = accuratehead - maxloop;
+                                    accuratehead = accuratehead - setloopsize;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -5143,7 +5094,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             } else {
                                 if (accuratehead > (frames - 1))
                                 {
-                                    accuratehead = ((frames - 1) - maxloop) + (accuratehead - (frames - 1));
+                                    accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...((frames - 1) - maxloop)...   // ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -5154,7 +5105,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         recordhead = -1;
                                     }
                                 } else if (accuratehead < ((frames - 1) - maxloop)) {
-                                    accuratehead = (frames - 1) - (((frames - 1) - maxloop) - accuratehead);
+                                    accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...((frames - 1) - maxloop)... // ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -5184,7 +5135,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 } else if (directionorig >= 0) {
                                     if (accuratehead > maxloop)
                                     {
-                                        accuratehead = accuratehead - maxloop;
+                                        accuratehead = accuratehead - setloopsize;  // fixed position ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
@@ -5197,21 +5148,21 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     }
                                     else if (accuratehead < 0.0)
                                     {
-                                        accuratehead = maxloop + accuratehead;
+                                        accuratehead = maxloop + setloopsize;       // !! this is surely completely wrong ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, 0, -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
                                             recordhead = -1;
                                         }
                                     }
-                                } else {
+                                } else {    // reverse
                                     if (accuratehead < ((frames - 1) - maxloop))
                                     {
-                                        accuratehead = (frames - 1) - (((frames - 1) - maxloop) - accuratehead);
+                                        accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...- maxloop)... // ??
                                         snrfade = 0.0;
                                         if (record)
                                         {
@@ -5223,7 +5174,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                             recordhead = -1;
                                         }
                                     } else if (accuratehead > (frames - 1)) {
-                                        accuratehead = ((frames - 1) - maxloop) + (accuratehead - (frames - 1));
+                                        accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...- maxloop)...   // ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
@@ -5235,7 +5186,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         }
                                     }
                                 }
-                            } else {
+                            } else {    // (not wrapflag)
                                 if ((accuratehead > endloop) || (accuratehead < startloop))
                                 {
                                     accuratehead = (direction >= 0) ? startloop : endloop;
@@ -6088,10 +6039,11 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startloop = (selstart * maxloop);    // !!
-                                endloop = startloop + (selection * maxloop);
+                                setloopsize = maxloop - minloop;
+                                accuratehead = startloop = minloop + (selstart * setloopsize);
+                                endloop = startloop + (selection * setloopsize);
                                 if (endloop > maxloop) {
-                                    endloop = endloop - (maxloop + 1);
+                                    endloop = endloop - (setloopsize + 1);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -6102,10 +6054,11 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop); // !!
-                                accuratehead = endloop = startloop + (selection * maxloop);
+                                setloopsize = maxloop - minloop;    // ((frames - 1) - setloopsize - minloop)   // ??
+                                startloop = ((frames - 1) - setloopsize) + (selstart * setloopsize);    // ((frames - 1) - maxloop) + (selstart * maxloop);   // ??
+                                accuratehead = endloop = startloop + (selection * setloopsize);         // startloop + (selection * maxloop);   ??
                                 if (endloop > (frames - 1)) {
-                                    endloop = ((frames - 1) - maxloop) + (endloop - frames);
+                                    endloop = ((frames - 1) - setloopsize) + (endloop - frames);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -6122,9 +6075,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             snrfade = 0.0;
                             triginit = 0;
                             append = recordalt = recendmark = 0;
-                        } else {    // jump / play
+                        } else {    // jump / play (inside 'window')
+                            setloopsize = maxloop - minloop;
                             if (jumpflag)
-                                accuratehead = (directionorig >= 0) ? (jumphead * maxloop) : (((frames - 1) - maxloop) + (jumphead * maxloop));
+                                accuratehead = (directionorig >= 0) ? ((jumphead * setloopsize) + minloop) : (((frames - 1) - maxloop) + (jumphead * setloopsize));
                             else
                                 accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
@@ -6139,9 +6093,11 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             triginit = 0;
                         }
                     } else {        // jump-based constraints (outside 'window')
+                        setloopsize = maxloop - minloop;
                         speedsrscaled = speed * srscale;
+                        
                         if (record)
-                            speedsrscaled = (fabs(speedsrscaled) > (maxloop / 1024)) ? ((maxloop / 1024) * direction) : speedsrscaled;
+                            speedsrscaled = (fabs(speedsrscaled) > (setloopsize / 1024)) ? ((setloopsize / 1024) * direction) : speedsrscaled;
                         accuratehead = accuratehead + speedsrscaled;
                         
                         if (jumpflag)
@@ -6157,7 +6113,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             {
                                 if (accuratehead > maxloop)
                                 {
-                                    accuratehead = accuratehead - maxloop;
+                                    accuratehead = accuratehead - setloopsize;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -6182,7 +6138,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             } else {
                                 if (accuratehead > (frames - 1))
                                 {
-                                    accuratehead = ((frames - 1) - maxloop) + (accuratehead - (frames - 1));
+                                    accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...((frames - 1) - maxloop)...   // ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -6193,7 +6149,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         recordhead = -1;
                                     }
                                 } else if (accuratehead < ((frames - 1) - maxloop)) {
-                                    accuratehead = (frames - 1) - (((frames - 1) - maxloop) - accuratehead);
+                                    accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...((frames - 1) - maxloop)... // ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -6223,7 +6179,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 } else if (directionorig >= 0) {
                                     if (accuratehead > maxloop)
                                     {
-                                        accuratehead = accuratehead - maxloop;
+                                        accuratehead = accuratehead - setloopsize;  // fixed position ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
@@ -6236,21 +6192,21 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     }
                                     else if (accuratehead < 0.0)
                                     {
-                                        accuratehead = maxloop + accuratehead;
+                                        accuratehead = maxloop + setloopsize;       // !! this is surely completely wrong ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, 0, -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
                                             recordhead = -1;
                                         }
                                     }
-                                } else {
+                                } else {    // reverse
                                     if (accuratehead < ((frames - 1) - maxloop))
                                     {
-                                        accuratehead = (frames - 1) - (((frames - 1) - maxloop) - accuratehead);
+                                        accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...- maxloop)... // ??
                                         snrfade = 0.0;
                                         if (record)
                                         {
@@ -6262,7 +6218,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                             recordhead = -1;
                                         }
                                     } else if (accuratehead > (frames - 1)) {
-                                        accuratehead = ((frames - 1) - maxloop) + (accuratehead - (frames - 1));
+                                        accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...- maxloop)...   // ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
@@ -6274,7 +6230,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         }
                                     }
                                 }
-                            } else {
+                            } else {    // (not wrapflag)
                                 if ((accuratehead > endloop) || (accuratehead < startloop))
                                 {
                                     accuratehead = (direction >= 0) ? startloop : endloop;
@@ -7061,10 +7017,11 @@ apden:
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startloop = (selstart * maxloop);    // !!
-                                endloop = startloop + (selection * maxloop);
+                                setloopsize = maxloop - minloop;
+                                accuratehead = startloop = minloop + (selstart * setloopsize);
+                                endloop = startloop + (selection * setloopsize);
                                 if (endloop > maxloop) {
-                                    endloop = endloop - (maxloop + 1);
+                                    endloop = endloop - (setloopsize + 1);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -7075,10 +7032,11 @@ apden:
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop); // !!
-                                accuratehead = endloop = startloop + (selection * maxloop);
+                                setloopsize = maxloop - minloop;    // ((frames - 1) - setloopsize - minloop)   // ??
+                                startloop = ((frames - 1) - setloopsize) + (selstart * setloopsize);    // ((frames - 1) - maxloop) + (selstart * maxloop);   // ??
+                                accuratehead = endloop = startloop + (selection * setloopsize);         // startloop + (selection * maxloop);   ??
                                 if (endloop > (frames - 1)) {
-                                    endloop = ((frames - 1) - maxloop) + (endloop - frames);
+                                    endloop = ((frames - 1) - setloopsize) + (endloop - frames);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -7095,9 +7053,10 @@ apden:
                             snrfade = 0.0;
                             triginit = 0;
                             append = recordalt = recendmark = 0;
-                        } else {    // jump / play
+                        } else {    // jump / play (inside 'window')
+                            setloopsize = maxloop - minloop;
                             if (jumpflag)
-                                accuratehead = (directionorig >= 0) ? (jumphead * maxloop) : (((frames - 1) - maxloop) + (jumphead * maxloop));
+                                accuratehead = (directionorig >= 0) ? ((jumphead * setloopsize) + minloop) : (((frames - 1) - maxloop) + (jumphead * setloopsize));
                             else
                                 accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
@@ -7112,9 +7071,11 @@ apden:
                             triginit = 0;
                         }
                     } else {        // jump-based constraints (outside 'window')
+                        setloopsize = maxloop - minloop;
                         speedsrscaled = speed * srscale;
+                        
                         if (record)
-                            speedsrscaled = (fabs(speedsrscaled) > (maxloop / 1024)) ? ((maxloop / 1024) * direction) : speedsrscaled;
+                            speedsrscaled = (fabs(speedsrscaled) > (setloopsize / 1024)) ? ((setloopsize / 1024) * direction) : speedsrscaled;
                         accuratehead = accuratehead + speedsrscaled;
                         
                         if (jumpflag)
@@ -7130,7 +7091,7 @@ apden:
                             {
                                 if (accuratehead > maxloop)
                                 {
-                                    accuratehead = accuratehead - maxloop;
+                                    accuratehead = accuratehead - setloopsize;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -7155,7 +7116,7 @@ apden:
                             } else {
                                 if (accuratehead > (frames - 1))
                                 {
-                                    accuratehead = ((frames - 1) - maxloop) + (accuratehead - (frames - 1));
+                                    accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...((frames - 1) - maxloop)...   // ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -7166,7 +7127,7 @@ apden:
                                         recordhead = -1;
                                     }
                                 } else if (accuratehead < ((frames - 1) - maxloop)) {
-                                    accuratehead = (frames - 1) - (((frames - 1) - maxloop) - accuratehead);
+                                    accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...((frames - 1) - maxloop)... // ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -7196,7 +7157,7 @@ apden:
                                 } else if (directionorig >= 0) {
                                     if (accuratehead > maxloop)
                                     {
-                                        accuratehead = accuratehead - maxloop;
+                                        accuratehead = accuratehead - setloopsize;  // fixed position ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
@@ -7209,21 +7170,21 @@ apden:
                                     }
                                     else if (accuratehead < 0.0)
                                     {
-                                        accuratehead = maxloop + accuratehead;
+                                        accuratehead = maxloop + setloopsize;       // !! this is surely completely wrong ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, 0, -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
                                             recordhead = -1;
                                         }
                                     }
-                                } else {
+                                } else {    // reverse
                                     if (accuratehead < ((frames - 1) - maxloop))
                                     {
-                                        accuratehead = (frames - 1) - (((frames - 1) - maxloop) - accuratehead);
+                                        accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...- maxloop)... // ??
                                         snrfade = 0.0;
                                         if (record)
                                         {
@@ -7235,7 +7196,7 @@ apden:
                                             recordhead = -1;
                                         }
                                     } else if (accuratehead > (frames - 1)) {
-                                        accuratehead = ((frames - 1) - maxloop) + (accuratehead - (frames - 1));
+                                        accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...- maxloop)...   // ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
@@ -7247,7 +7208,7 @@ apden:
                                         }
                                     }
                                 }
-                            } else {
+                            } else {    // (not wrapflag)
                                 if ((accuratehead > endloop) || (accuratehead < startloop))
                                 {
                                     accuratehead = (direction >= 0) ? startloop : endloop;
@@ -7970,10 +7931,11 @@ apdne:
                             if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
-                                accuratehead = startloop = (selstart * maxloop);    // !!
-                                endloop = startloop + (selection * maxloop);
+                                setloopsize = maxloop - minloop;
+                                accuratehead = startloop = minloop + (selstart * setloopsize);
+                                endloop = startloop + (selection * setloopsize);
                                 if (endloop > maxloop) {
-                                    endloop = endloop - (maxloop + 1);
+                                    endloop = endloop - (setloopsize + 1);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -7984,10 +7946,11 @@ apdne:
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                                startloop = ((frames - 1) - maxloop) + (selstart * maxloop); // !!
-                                accuratehead = endloop = startloop + (selection * maxloop);
+                                setloopsize = maxloop - minloop;    // ((frames - 1) - setloopsize - minloop)   // ??
+                                startloop = ((frames - 1) - setloopsize) + (selstart * setloopsize);    // ((frames - 1) - maxloop) + (selstart * maxloop);   // ??
+                                accuratehead = endloop = startloop + (selection * setloopsize);         // startloop + (selection * maxloop);   ??
                                 if (endloop > (frames - 1)) {
-                                    endloop = ((frames - 1) - maxloop) + (endloop - frames);
+                                    endloop = ((frames - 1) - setloopsize) + (endloop - frames);
                                     wrapflag = 1;
                                 } else {
                                     wrapflag = 0;
@@ -8004,9 +7967,10 @@ apdne:
                             snrfade = 0.0;
                             triginit = 0;
                             append = recordalt = recendmark = 0;
-                        } else {    // jump / play
+                        } else {    // jump / play (inside 'window')
+                            setloopsize = maxloop - minloop;
                             if (jumpflag)
-                                accuratehead = (directionorig >= 0) ? (jumphead * maxloop) : (((frames - 1) - maxloop) + (jumphead * maxloop));
+                                accuratehead = (directionorig >= 0) ? ((jumphead * setloopsize) + minloop) : (((frames - 1) - maxloop) + (jumphead * setloopsize));
                             else
                                 accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
@@ -8021,9 +7985,11 @@ apdne:
                             triginit = 0;
                         }
                     } else {        // jump-based constraints (outside 'window')
+                        setloopsize = maxloop - minloop;
                         speedsrscaled = speed * srscale;
+                        
                         if (record)
-                            speedsrscaled = (fabs(speedsrscaled) > (maxloop / 1024)) ? ((maxloop / 1024) * direction) : speedsrscaled;
+                            speedsrscaled = (fabs(speedsrscaled) > (setloopsize / 1024)) ? ((setloopsize / 1024) * direction) : speedsrscaled;
                         accuratehead = accuratehead + speedsrscaled;
                         
                         if (jumpflag)
@@ -8039,7 +8005,7 @@ apdne:
                             {
                                 if (accuratehead > maxloop)
                                 {
-                                    accuratehead = accuratehead - maxloop;
+                                    accuratehead = accuratehead - setloopsize;
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -8064,7 +8030,7 @@ apdne:
                             } else {
                                 if (accuratehead > (frames - 1))
                                 {
-                                    accuratehead = ((frames - 1) - maxloop) + (accuratehead - (frames - 1));
+                                    accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...((frames - 1) - maxloop)...   // ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -8075,7 +8041,7 @@ apdne:
                                         recordhead = -1;
                                     }
                                 } else if (accuratehead < ((frames - 1) - maxloop)) {
-                                    accuratehead = (frames - 1) - (((frames - 1) - maxloop) - accuratehead);
+                                    accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...((frames - 1) - maxloop)... // ??
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
@@ -8105,7 +8071,7 @@ apdne:
                                 } else if (directionorig >= 0) {
                                     if (accuratehead > maxloop)
                                     {
-                                        accuratehead = accuratehead - maxloop;
+                                        accuratehead = accuratehead - setloopsize;  // fixed position ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
@@ -8118,21 +8084,21 @@ apdne:
                                     }
                                     else if (accuratehead < 0.0)
                                     {
-                                        accuratehead = maxloop + accuratehead;
+                                        accuratehead = maxloop + setloopsize;       // !! this is surely completely wrong ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, 0, -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
                                             recordhead = -1;
                                         }
                                     }
-                                } else {
+                                } else {    // reverse
                                     if (accuratehead < ((frames - 1) - maxloop))
                                     {
-                                        accuratehead = (frames - 1) - (((frames - 1) - maxloop) - accuratehead);
+                                        accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...- maxloop)... // ??
                                         snrfade = 0.0;
                                         if (record)
                                         {
@@ -8144,7 +8110,7 @@ apdne:
                                             recordhead = -1;
                                         }
                                     } else if (accuratehead > (frames - 1)) {
-                                        accuratehead = ((frames - 1) - maxloop) + (accuratehead - (frames - 1));
+                                        accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...- maxloop)...   // ??
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
@@ -8156,7 +8122,7 @@ apdne:
                                         }
                                     }
                                 }
-                            } else {
+                            } else {    // (not wrapflag)
                                 if ((accuratehead > endloop) || (accuratehead < startloop))
                                 {
                                     accuratehead = (direction >= 0) ? startloop : endloop;
