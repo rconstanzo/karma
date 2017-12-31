@@ -51,13 +51,15 @@
 
 //  //  //  TODO version 1.5:
 //  //  //  fix: a bunch of bugs & stuff, incl. ...
-//  //  //  - scheduling and threading problem relating to inability to call multiple methods to the object ...
-//  //  //  ... by using comma-separated message boxes (etc) <<-- big bug
+//  //  //  - perform loop in/out updating relating to inability to call multiple methods to the object ...
+//  //  //  ... by using comma-separated message boxes (etc) <<-- big bug, probably unfixable until version 2 rewrite
 //  //  //  - 'statehuman' (statemachine) output (including the overdub notify bug)
-//  //  //  - when new loop points are set ("set" or "setloop" methods) list-output not updated correctly
+//  //  //  - switching buffer whilst recording can break all shit
+//  //  //  - reverse record sync broken on 'initial loop'
+//  //  //  - 'append' is fucked
 
 //  //  //  TODO version 2.0:
-//  //  //  rewrite, take multiple perform routines out and put
+//  //  //  rewrite from scratch, take multiple perform routines out and put
 //  //  //  interpolation routines and ipoke out into seperate files
 //  //  //  then will be able to integrate 'rubberband' and add better ipoke interpolations etc
 //  //  //  also look into raja's new 'crossfade' ideas as an optional alternative to 'switch & ramp'
@@ -170,7 +172,7 @@ typedef struct _karma {
     t_bool  recordinit;     // initial recording ("...flag to determine whether to apply the 'record' message to initial loop recording or not")
     t_bool  initinit;       // initial initialise (raja: "...hack i used to determine whether DSP is turned on for the very first time or not")
     t_bool  initskip;       // is initialising = 0
-    t_bool  buf_modified;   // buffer has been modified boolbuf_modified_temp
+    t_bool  buf_modified;   // buffer has been modified bool
     t_bool  clockgo;        // activate clock (for list outlet)
 
 //  t_atom   datalist[7];   // !! TODO - store list ??
@@ -225,12 +227,7 @@ static  t_symbol    *ps_nothing, *ps_dummy, *ps_buffer_modified;
 static  t_symbol    *ps_phase, *ps_samples, *ps_milliseconds;
 static  t_class     *karma_class = NULL;
 
-/*
-inline double sort_double(double low, double high)  // this is bullshit
-{
-    return MIN(low, high), MAX(low, high);
-}
-*/
+
 // easing function for recording (with ipoke)
 static inline double ease_record(double y1, char updwn, double globalramp, t_ptr_int playfade)  // !! rewrite !!
 {
@@ -699,16 +696,16 @@ void karma_buf_setup(t_karma *x, t_symbol *s)
         object_error((t_object *)x, "there is no buffer~ named %s", s->s_name);
     } else {
 */  if (buf != NULL) {
-        x->directionorig = 0;
-        x->maxhead = x->playhead    = 0.0;
+        x->directionorig            = 0;
+        x->maxhead  = x->playhead   = 0.0;
         x->recordhead               = -1;
         x->bchans   = buffer_getchannelcount(buf);
         x->bframes  = buffer_getframecount(buf);
         x->bmsr     = buffer_getmillisamplerate(buf);
         x->bsr      = buffer_getsamplerate(buf);
         x->srscale                  = x->bsr / x->sr;
-        x->minloop = x->startloop   = 0.0;
-        x->maxloop = x->endloop     = (x->bframes - 1);
+        x->minloop  = x->startloop  = 0.0;
+        x->maxloop  = x->endloop    = (x->bframes - 1);
         x->selstart                 = 0.0;
         x->selection                = 1.0;
 
@@ -741,7 +738,7 @@ void karma_buf_modset(t_karma *x, t_buffer_obj *b)
             karma_select_start(x, x->selstart);
 //          karma_select_internal(x, x->selstart, x->selection);
             
-            post("modset called");      // dev
+//          post("modset called");      // dev
         }
     }
 }
@@ -843,7 +840,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
     x->minloop = x->startloop = low * bframesm1;
     x->maxloop = x->endloop = high * bframesm1;
 
-    // update selection only if no additional args (min/max low/high) <<-- NO !! (always update)
+    // update selection only if no additional args (min/max low/high) ?? <<-- NO !! (always update)
     karma_select_size(x, x->selection);
     karma_select_start(x, x->selstart);
     //karma_select_internal(x, x->selstart, x->selection);
@@ -1195,7 +1192,8 @@ void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)  
 
 void karma_setloop(t_karma *x, t_symbol *s, short ac, t_atom *av)   // " setloop ..... "
 {
-    defer(x, (method)karma_setloop_internal, s, ac, av);            // main method   // not defered ??
+//  defer(x, (method)karma_setloop_internal, s, ac, av);            // main method
+    karma_setloop_internal(x, s, ac, av);
 }
 /*
 void karma_clock_list(t_karma *x)
@@ -1254,17 +1252,17 @@ void karma_clock_list(t_karma *x)
         double selection    = x->selection;
         double setloopsize, normalisedposition;
         
-        setloopsize         = maxloop - minloop;                                                // ((playhead-startloop)/setloopsize) // ??
+        setloopsize         = maxloop - minloop;    //  ((playhead-(frames-maxloop))/setloopsize) : ((playhead-startloop)/setloopsize)  // ??
         normalisedposition  = CLAMP( directflag ? ((playhead-(frames-setloopsize))/setloopsize) : ((playhead-minloop)/setloopsize), 0., 1. );
         
-        t_atom datalist[7];                                     // !! reverse logics are wrong ??
-        atom_setfloat(  datalist + 0,    normalisedposition                     );                              // position float normalised 0..1
-        atom_setlong(   datalist + 1,    go         );                                                          // play flag int    // pointless
-        atom_setlong(   datalist + 2,    record     );                                                          // record flag int  // pointless
-        atom_setfloat(  datalist + 3, (  directflag ? ((frames - setloopsize) / bmsr) : (minloop / bmsr) )  );  // start float ms   // ??
-        atom_setfloat(  datalist + 4, (  directflag ? (frames / bmsr) : ((maxloop + 1) / bmsr) )            );  // end float ms     // ??
-        atom_setfloat(  datalist + 5, ( (selection * (setloopsize + 1)) / bmsr) );                              // window float ms  // ??
-        atom_setlong(   datalist + 6,    statehuman );                                                          // state flag int
+        t_atom datalist[7];                                     // !! reverse logics ??
+        atom_setfloat(  datalist + 0,    normalisedposition                 );                                      // position float normalised 0..1
+        atom_setlong(   datalist + 1,    go         );                                                              // play flag int    // pointless
+        atom_setlong(   datalist + 2,    record     );  //                          ((minloop + 1) / bmsr) // ??    // record flag int  // pointless
+        atom_setfloat(  datalist + 3, (  directflag ? ((frames - setloopsize) / bmsr) : (minloop / bmsr) )  );      // start float ms
+        atom_setfloat(  datalist + 4, (  directflag ? (frames / bmsr) : (maxloop / bmsr) )                  );      // end float ms
+        atom_setfloat(  datalist + 5, ( (selection * setloopsize) / bmsr)   );//    ((maxloop + 1) / bmsr)          // window float ms
+        atom_setlong(   datalist + 6,    statehuman );  // (selection * (setloopsize + 1))  // ??                   // state flag int
         
         outlet_list(x->messout, 0L, 7, datalist);
 //      outlet_list(x->messout, gensym("list"), 7, datalist);
@@ -1400,7 +1398,7 @@ void karma_select_start(t_karma *x, double positionstart)   // positionstart = "
         if (x->directionorig < 0)   // if originally in reverse
         {
             bfrmaesminusone = x->bframes - 1;
-                                    // !! N.B. (bfrmaesminusone - "x->maxloop")
+
             x->startloop = CLAMP( (bfrmaesminusone - x->maxloop) + (positionstart * setloopsize), bfrmaesminusone - x->maxloop, bfrmaesminusone );
             x->endloop = x->startloop + (x->selection * x->maxloop);
             
@@ -1716,7 +1714,7 @@ void karma_jump(t_karma *x, double jumpposition)
         }
     }
 }
-
+/*
 t_max_err karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat)
 {
     if (msg == ps_buffer_modified)
@@ -1724,18 +1722,18 @@ t_max_err karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, v
     
     return buffer_ref_notify(x->buf, s, msg, sndr, dat);
 }
-/*
+*/
 // N.B. ??
 t_max_err karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat)
 {
     t_symbol *bufnamecheck = (t_symbol *)object_method((t_object *)sndr, gensym("getname"));
  
-    if (bufnamecheck == x->bufname)     // check if calling object was the window buffer
+    if (bufnamecheck == x->bufname)     // check if calling object was the buffer
         return  buffer_ref_notify(x->buf, s, msg, sndr, dat);   // return with the calling buffer
     else                                // if calling object was none of the expected buffers
         return  MAX_ERR_NONE;                                   // return generic MAX_ERR_NONE
 }
-*/
+
 void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long vecount, long flags)
 {
     x->sr       = srate;
@@ -1942,7 +1940,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 recordhead = -1;
             }
             snrfade = 0.0;
-        }   // !! !!
+        }
         
         if ((record - recordprev) < 0) {           // samp @record-off
             if (globalramp)
@@ -2189,13 +2187,10 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 }                                                                                   // setloopsize  // ??
                 interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);  // samp-indices for interp
                 
-                if (record) {              // if recording do linear-interp else...
+                if (record) {           // if recording do linear-interp else...
                     osamp1 =    LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
                 } else {                // ...cubic / spline if interpflag > 0 (default cubic)
-/*                    osamp1 = interp ?
-                                CUBIC_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]) :
-                                    LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
-*/                  if (interp == 1)
+                    if (interp == 1)
                         osamp1  = CUBIC_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
                     else if (interp == 2)
                         osamp1  = SPLINE_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
@@ -2230,7 +2225,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 case 2:
                                     if (!record)
                                         triginit = jumpflag = 1;
-//                                  break;                          // !! no break here ??
+//                                  break;                          // !! no break - pass 2 -> 3 !!
                                 case 3:                             // jump // record off reg
                                     playfadeflag = playfade = 0;
                                     break;
@@ -2253,7 +2248,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         case 2:
                             if (!record)
                                 triginit = jumpflag = 1;
-//                          break;                                  // !! no break here ??
+//                          break;                                  // !! no break - pass 2 -> 3 !!
                         case 3:                                     // jump     // record off reg
                             playfadeflag = 0;
                             break;
@@ -2273,7 +2268,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             *out1++ = osamp1;
             if (syncoutlet) {
                 setloopsize = maxloop-minloop;
-                *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
             }
 
             /*
@@ -2543,7 +2538,7 @@ apned:
             *out1++ = osamp1;
             if (syncoutlet) {
                 setloopsize = maxloop-minloop;
-                *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
             }
             
             // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -2705,7 +2700,7 @@ apned:
                                     } else {
                                         maxloop = maxhead;
                                     }
-//                                  break;                  // !! maybe no break here ??
+//                                  break;                  // !! no break - pass 1 -> 2 !!
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
@@ -2741,7 +2736,7 @@ apned:
                                 } else {
                                     maxloop = maxhead;
                                 }
-//                              break;                      // !! maybe no break here ??
+//                              break;                      // !! no break - pass 1 -> 2 !!
                             case 2:
                                 record = looprecord = 0;
                                 triginit = 1;
@@ -2843,7 +2838,8 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     double o1prev, o2prev, o1dif, o2dif, frac, snrfade, globalramp, snrramp, writeval1, writeval2, coeff1, coeff2, recin1, recin2;
     t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
     char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
-    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startloop, endloop, playhead, recordhead, minloop, maxloop, setloopsize, nchan, snrtype, interp;
+    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, nchan, snrtype, interp;
+    t_ptr_int frames, startloop, endloop, playhead, recordhead, minloop, maxloop, setloopsize;
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
     float *b = buffer_locksamples(buf);
@@ -2883,7 +2879,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     directionprev   = x->directionprev;
     minloop         = x->minloop;
     maxloop         = x->maxloop;
-    selection            = x->selection;
+    selection       = x->selection;
     looprecord      = x->looprecord;
     startloop       = x->startloop;
     selstart        = x->selstart;
@@ -2995,7 +2991,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                     recordhead = -1;
                 }
                 snrfade = 0.0;
-            }   // !! !!
+            }
             
             if ((record - recordprev) < 0) {           // samp @record-off
                 if (globalramp)
@@ -3288,7 +3284,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     case 2:
                                         if (!record)
                                             triginit = jumpflag = 1;
-//                                      break;                          // !! no break here ??
+//                                      break;                          // !! no break - pass 2 -> 3 !!
                                     case 3:                             // jump // record off reg
                                         playfadeflag = playfade = 0;
                                         break;
@@ -3311,7 +3307,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             case 2:
                                 if (!record)
                                     triginit = jumpflag = 1;
-//                              break;                                  // !! no break here ??
+//                              break;                                  // !! no break - pass 2 -> 3 !!
                             case 3:                                     // jump     // record off reg
                                 playfadeflag = 0;
                                 break;
@@ -3334,7 +3330,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                 *out2++ = osamp2;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 /*
@@ -3614,7 +3610,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                 *out2++ = osamp2;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -3820,7 +3816,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         } else {
                                             maxloop = maxhead;
                                         }
-//                                      break;                      // !! maybe no break here ??
+//                                      break;                      // !! no break - pass 1 -> 2 !!
                                     case 2:
                                         record = looprecord = 0;
                                         triginit = 1;
@@ -3856,7 +3852,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     } else {
                                         maxloop = maxhead;
                                     }
-//                                  break;                      // !! maybe no break here ??
+//                                  break;                      // !! no break - pass 1 -> 2 !!
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
@@ -4184,7 +4180,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     case 2:
                                         if (!record)
                                             triginit = jumpflag = 1;
-//                                      break;                          // !! no break here ??
+//                                      break;                          // !! no break - pass 2 -> 3 !!
                                     case 3:                             // jump // record off reg
                                         playfadeflag = playfade = 0;
                                         break;
@@ -4207,7 +4203,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             case 2:
                                 if (!record)
                                     triginit = jumpflag = 1;
-//                              break;                                  // !! no break here ??
+//                              break;                                  // !! no break - pass 2 -> 3 !!
                             case 3:                                     // jump     // record off reg
                                 playfadeflag = 0;
                                 break;
@@ -4229,7 +4225,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                 *out2++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 /*
@@ -4497,7 +4493,7 @@ apnde:
                 *out2++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -4659,7 +4655,7 @@ apnde:
                                         } else {
                                             maxloop = maxhead;
                                         }
-//                                      break;                      // !! maybe no break here ??
+//                                      break;                      // !! no break - pass 1 -> 2 !!
                                     case 2:
                                         record = looprecord = 0;
                                         triginit = 1;
@@ -4695,7 +4691,7 @@ apnde:
                                     } else {
                                         maxloop = maxhead;
                                     }
-//                                  break;                      // !! maybe no break here ??
+//                                  break;                      // !! no break - pass 1 -> 2 !!
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
@@ -4808,7 +4804,8 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     double writeval1, writeval2, writeval3, writeval4, coeff1, coeff2, coeff3, coeff4, recin1, recin2, recin3, recin4;
     t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
     char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
-    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, frames, startloop, endloop, playhead, recordhead, minloop, maxloop, setloopsize, nchan, snrtype, interp;
+    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, nchan, snrtype, interp;
+    t_ptr_int frames, startloop, endloop, playhead, recordhead, minloop, maxloop, setloopsize;
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
     float *b = buffer_locksamples(buf);
@@ -4854,7 +4851,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     directionprev   = x->directionprev;
     minloop         = x->minloop;
     maxloop         = x->maxloop;
-    selection            = x->selection;
+    selection       = x->selection;
     looprecord      = x->looprecord;
     startloop       = x->startloop;
     selstart        = x->selstart;
@@ -4968,7 +4965,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                     recordhead = -1;
                 }
                 snrfade = 0.0;
-            }   // !! !!
+            }
             
             if ((record - recordprev) < 0) {           // samp @record-off
                 if (globalramp)
@@ -4992,7 +4989,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                     {
                         if (recendmark)  // calculate end of loop
                         {
-                            if (directionorig >= 0)
+                            if (directionorig >= 0)     // forwards
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
                                 setloopsize = maxloop - minloop;
@@ -5008,7 +5005,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     if (globalramp)
                                         ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
                                 }
-                            } else {
+                            } else {                    // reverse
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
                                 setloopsize = maxloop - minloop;    // ((frames - 1) - setloopsize - minloop)   // ??
                                 startloop = ((frames - 1) - setloopsize) + (selstart * setloopsize);    // ((frames - 1) - maxloop) + (selstart * maxloop);   // ??
@@ -5031,7 +5028,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             snrfade = 0.0;
                             triginit = 0;
                             append = recordalt = recendmark = 0;
-                        } else {    // jump / play (inside 'window')
+                        } else {                        // jump / play (inside 'window')
                             setloopsize = maxloop - minloop;
                             if (jumpflag)
                                 accuratehead = (directionorig >= 0) ? ((jumphead * setloopsize) + minloop) : (((frames - 1) - maxloop) + (jumphead * setloopsize));
@@ -5048,7 +5045,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             snrfade = 0.0;
                             triginit = 0;
                         }
-                    } else {        // jump-based constraints (outside 'window')
+                    } else {                            // jump-based constraints (outside 'window')
                         setloopsize = maxloop - minloop;
                         speedsrscaled = speed * srscale;
                         
@@ -5117,7 +5114,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     }
                                 }
                             }
-                        } else {    // regular 'window' / 'position' constraints
+                        } else {                        // regular 'window' / 'position' constraints
                             if (wrapflag)
                             {
                                 if ((accuratehead > endloop) && (accuratehead < startloop))
@@ -5275,7 +5272,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     case 2:
                                         if (!record)
                                             triginit = jumpflag = 1;
-//                                      break;                          // !! no break here ??
+//                                      break;                          // !! no break - pass 2 -> 3 !!
                                     case 3:                             // jump // record off reg
                                         playfadeflag = playfade = 0;
                                         break;
@@ -5298,7 +5295,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             case 2:
                                 if (!record)
                                     triginit = jumpflag = 1;
-//                              break;                                  // !! no break here ??
+//                              break;                                  // !! no break - pass 2 -> 3 !!
                             case 3:                                     // jump     // record off reg
                                 playfadeflag = 0;
                                 break;
@@ -5327,7 +5324,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 *out4++ = osamp4;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 /*
@@ -5637,7 +5634,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 *out4++ = osamp4;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -5931,7 +5928,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         } else {
                                             maxloop = maxhead;
                                         }
-//                                      break;                      // !! maybe no break here ??
+//                                      break;                      // !! no break - pass 1 -> 2 !!
                                     case 2:
                                         record = looprecord = 0;
                                         triginit = 1;
@@ -5967,7 +5964,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     } else {
                                         maxloop = maxhead;
                                     }
-//                                  break;                      // !! maybe no break here ??
+//                                  break;                      // !! no break - pass 1 -> 2 !!
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
@@ -6312,7 +6309,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     case 2:
                                         if (!record)
                                             triginit = jumpflag = 1;
-//                                      break;                          // !! no break here ??
+//                                      break;                          // !! no break - pass 2 -> 3 !!
                                     case 3:                             // jump // record off reg
                                         playfadeflag = playfade = 0;
                                         break;
@@ -6335,7 +6332,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             case 2:
                                 if (!record)
                                     triginit = jumpflag = 1;
-//                              break;                                  // !! no break here ??
+//                              break;                                  // !! no break - pass 2 -> 3 !!
                             case 3:                                     // jump     // record off reg
                                 playfadeflag = 0;
                                 break;
@@ -6363,7 +6360,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 *out4++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 /*
@@ -6660,7 +6657,7 @@ apden:
                 *out4++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -6910,7 +6907,7 @@ apden:
                                         } else {
                                             maxloop = maxhead;
                                         }
-//                                      break;              // !! maybe no break here ??
+//                                      break;              // !! no break - pass 1 -> 2 !!
                                     case 2:
                                         record = looprecord = 0;
                                         triginit = 1;
@@ -6946,7 +6943,7 @@ apden:
                                     } else {
                                         maxloop = maxhead;
                                     }
-//                                  break;                  // !! maybe no break here ??
+//                                  break;                  // !! no break - pass 1 -> 2 !!
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
@@ -7283,7 +7280,7 @@ apden:
                                     case 2:
                                         if (!record)
                                             triginit = jumpflag = 1;
-//                                      break;                          // !! no break here ??
+//                                      break;                          // !! no break - pass 2 -> 3 !!
                                     case 3:                             // jump // record off reg
                                         playfadeflag = playfade = 0;
                                         break;
@@ -7306,7 +7303,7 @@ apden:
                             case 2:
                                 if (!record)
                                     triginit = jumpflag = 1;
-//                              break;                                  // !! no break here ??
+//                              break;                                  // !! no break - pass 2 -> 3 !!
                             case 3:                                     // jump     // record off reg
                                 playfadeflag = 0;
                                 break;
@@ -7333,7 +7330,7 @@ apden:
                 *out4++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 /*
@@ -7617,7 +7614,7 @@ apdne:
                 *out4++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -7823,7 +7820,7 @@ apdne:
                                         } else {
                                             maxloop = maxhead;
                                         }
-//                                      break;                  // !! maybe no break here ??
+//                                      break;                  // !! no break - pass 1 -> 2 !!
                                     case 2:
                                         record = looprecord = 0;
                                         triginit = 1;
@@ -7859,7 +7856,7 @@ apdne:
                                     } else {
                                         maxloop = maxhead;
                                     }
-//                                  break;                      // !! maybe no break here ??
+//                                  break;                      // !! no break - pass 1 -> 2 !!
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
@@ -8189,7 +8186,7 @@ apdne:
                                     case 2:
                                         if (!record)
                                             triginit = jumpflag = 1;
-//                                      break;                          // !! no break here ??
+//                                      break;                          // !! no break - pass 2 -> 3 !!
                                     case 3:                             // jump // record off reg
                                         playfadeflag = playfade = 0;
                                         break;
@@ -8212,7 +8209,7 @@ apdne:
                             case 2:
                                 if (!record)
                                     triginit = jumpflag = 1;
-//                              break;                                  // !! no break here ??
+//                              break;                                  // !! no break - pass 2 -> 3 !!
                             case 3:                                     // jump     // record off reg
                                 playfadeflag = 0;
                                 break;
@@ -8238,7 +8235,7 @@ apdne:
                 *out4++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 /*
@@ -8512,7 +8509,7 @@ apnde:
                 *out4++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : (accuratehead-(frames-setloopsize)/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -8674,7 +8671,7 @@ apnde:
                                         } else {
                                             maxloop = maxhead;
                                         }
-//                                      break;                  // !! maybe no break here ??
+//                                      break;                  // !! no break - pass 1 -> 2 !!
                                     case 2:
                                         record = looprecord = 0;
                                         triginit = 1;
@@ -8710,7 +8707,7 @@ apnde:
                                     } else {
                                         maxloop = maxhead;
                                     }
-//                                  break;                      // !! maybe no break here ??
+//                                  break;                      // !! no break - pass 1 -> 2 !!
                                 case 2:
                                     record = looprecord = 0;
                                     triginit = 1;
