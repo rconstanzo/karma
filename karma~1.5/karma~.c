@@ -55,7 +55,6 @@
 //  //  //  ... by using comma-separated message boxes (etc) <<-- big bug, probably unfixable until version 2 rewrite
 //  //  //  - 'statehuman' (statemachine) output (including the overdub notify bug)
 //  //  //  - switching buffer whilst recording can break all shit
-//  //  //  - reverse record sync broken on 'initial loop'
 //  //  //  - 'append' is fucked
 
 //  //  //  TODO version 2.0:
@@ -153,7 +152,7 @@ typedef struct _karma {
     char    statehuman;     // master looper state human logic (not 'statecontrol') (0=stop, 1=play, 2=record, 3=overdub, 4=append 5=initial)
 
     char    playfadeflag;   // playback up/down flag, used as: 0 = fade up/in, 1 = fade down/out (<<-- TODO: reverse ??) but case switch 0..4 ??
-    char    recfadeflag;    // record up/down flag, 0 = fade up/in, 1 = fade down/out (<<-- TODO: reverse ??) bust used 0..5 ??
+    char    recfadeflag;    // record up/down flag, 0 = fade up/in, 1 = fade down/out (<<-- TODO: reverse ??) but used 0..5 ??
     char    recendmark;     // the flag to show that the loop is done recording and to mark the ending of it
     char    directionorig;  // original direction loop was initially recorded (if loop was initially recorded in reverse started from end-of-buffer etc)
     char    directionprev;  // previous direction (marker for directional changes to place where fades need to happen during recording)
@@ -840,7 +839,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
     x->minloop = x->startloop = low * bframesm1;
     x->maxloop = x->endloop = high * bframesm1;
 
-    // update selection only if no additional args (min/max low/high) ?? <<-- NO !! (always update)
+    // (always update)
     karma_select_size(x, x->selection);
     karma_select_start(x, x->selstart);
     //karma_select_internal(x, x->selstart, x->selection);
@@ -861,7 +860,7 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
 
     // error check .....
 
-    b_temp  = atom_getsym(argv + 0);    // already arg checked to be A_SYM in karma_buf_change
+    b_temp  = atom_getsym(argv + 0);    // already arg checked to be A_SYM in karma_buf_change()
     
     if (b_temp == ps_nothing)
     {
@@ -895,7 +894,7 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
             
             x->buf_temp = 0;            // should dspfree the temp buffer here ??
             object_free(x->buf_temp);   // ... ??
-            callerid = true;            // identify caller of 'karma_buf_values_internal'
+            callerid = true;            // identify caller of 'karma_buf_values_internal()'
             
             b  = atom_getsym(argv + 0); // already arg checked
 
@@ -957,12 +956,12 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
                     temphigh = atom_getfloat(argv + 2);
                     if (temphigh < 0.) {
                         object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
-                    }   // !! do maximum check in karma_buf_values_internal !!
+                    }   // !! do maximum check in karma_buf_values_internal() !!
                 } else if (atom_gettype(argv + 2) == A_LONG) {
                     temphigh = (double)atom_getlong(argv + 2);
                     if (temphigh < 0.) {
                         object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
-                    }   // !! do maximum check in karma_buf_values_internal !!
+                    }   // !! do maximum check in karma_buf_values_internal() !!
                 } else if ( (atom_gettype(argv + 2) == A_SYM) && (argc < 4) ) {
                     loop_points_sym = atom_getsym(argv + 2);
                     if (loop_points_sym == ps_dummy)    // !! "dummy" is silent++, move on...
@@ -994,7 +993,7 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
                         if (templow < 0.) {
                             object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
                             templow = 0.;
-                        }   // !! do maximum check in karma_buf_values_internal !!
+                        }   // !! do maximum check in karma_buf_values_internal() !!
                     }
                 } else if (atom_gettype(argv + 1) == A_LONG) {
                     if (temphigh < 0.) {
@@ -1006,7 +1005,7 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
                         if (templow < 0.) {
                             object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
                             templow = 0.;
-                        }   // !! do maximum check in karma_buf_values_internal !!
+                        }   // !! do maximum check in karma_buf_values_internal() !!
                     }
                 } else if (atom_gettype(argv + 1) == A_SYM) {
                     loop_points_sym = atom_getsym(argv + 1);
@@ -1082,7 +1081,7 @@ void karma_buf_change(t_karma *x, t_symbol *s, short ac, t_atom *av)    // " set
 // pete says: i know this branching is horrible, will rewrite soon...
 void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)   // " setloop ..... "
 {
-    t_bool callerid = false;                // identify caller of 'karma_buf_values_internal'
+    t_bool callerid = false;                // identify caller of 'karma_buf_values_internal()'
     t_symbol *loop_points_sym = 0;
     long loop_points_flag;                  // specify start/end loop points: 0 = in phase, 1 = in samples, 2 = in milliseconds (default)
     double templow, temphigh, temphightemp;
@@ -1128,12 +1127,12 @@ void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)  
             temphigh = atom_getfloat(argv + 1);
             if (temphigh < 0.) {
                 object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
-            }   // !! do maximum check in karma_buf_values_internal !!
+            }   // !! do maximum check in karma_buf_values_internal() !!
         } else if (atom_gettype(argv + 1) == A_LONG) {
             temphigh = (double)atom_getlong(argv + 1);
             if (temphigh < 0.) {
                 object_warn((t_object *) x, "loop maximum cannot be less than 0., resetting");
-            }   // !! do maximum check in karma_buf_values_internal !!
+            }   // !! do maximum check in karma_buf_values_internal() !!
         } else if ( (atom_gettype(argv + 1) == A_SYM) && (argc < 3) ) {
             loop_points_sym = atom_getsym(argv + 1);
             if ( (loop_points_sym == ps_phase) || (loop_points_sym == gensym("PHASE")) || (loop_points_sym == gensym("ph")) )// phase
@@ -1163,7 +1162,7 @@ void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)  
                 if (templow < 0.) {
                     object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
                     templow = 0.;
-                }   // !! do maximum check in karma_buf_values_internal !!
+                }   // !! do maximum check in karma_buf_values_internal() !!
             }
         } else if (atom_gettype(argv + 0) == A_LONG) {
             if (temphigh < 0.) {
@@ -1175,7 +1174,7 @@ void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)  
                 if (templow < 0.) {
                     object_warn((t_object *) x, "loop minimum cannot be less than 0., setting to 0.");
                     templow = 0.;
-                }   // !! do maximum check in karma_buf_values_internal !!
+                }   // !! do maximum check in karma_buf_values_internal() !!
             }
         } else {
             object_warn((t_object *) x, "%s message does not understand arg no.1, resetting loop point", s->s_name);
@@ -1195,41 +1194,6 @@ void karma_setloop(t_karma *x, t_symbol *s, short ac, t_atom *av)   // " setloop
 //  defer(x, (method)karma_setloop_internal, s, ac, av);            // main method
     karma_setloop_internal(x, s, ac, av);
 }
-/*
-void karma_clock_list(t_karma *x)
-{
-    if (x->reportlist > 0)    // ('reportlist 0' == off, else milliseconds)
-    {
-        t_ptr_int frames = x->bframes - 1;
-        t_ptr_int maxloop = x->maxloop;
-        t_ptr_int directionorig = x->directionorig;
-        
-        t_bool record = x->record;
-        t_bool go = x->go;
-
-        char statehuman = x->statehuman;
-        
-        double bmsr = x->bmsr;
-        double playhead = x->playhead;
-        double selection = x->selection;
-        
-        t_atom datalist[7];                                                                                 // position float % 0..1
-        atom_setfloat(  datalist + 0,    CLAMP((directionorig < 0) ? ((playhead - (frames - maxloop)) / maxloop) : (playhead / maxloop), 0., 1.) );
-        atom_setlong(   datalist + 1,    go     );                                                          // play flag int    // pointless
-        atom_setlong(   datalist + 2,    record );                                                          // record flag int  // pointless
-        atom_setfloat(  datalist + 3, ( (directionorig < 0) ? ((frames - maxloop) / bmsr) : 0.0  )   );     // start float ms   // !!!!!!!
-        atom_setfloat(  datalist + 4, ( (directionorig < 0) ? (frames / bmsr) : (maxloop / bmsr) )   );     // end float ms
-        atom_setfloat(  datalist + 5, ( (selection * maxloop) / bmsr)   );                                  // window float ms
-        atom_setlong(   datalist + 6,    statehuman );                                                      // state flag int
- 
-        outlet_list(x->messout, 0L, 7, datalist);               // &datalist !! ??
-
-        if (sys_getdspstate() && (x->reportlist > 0)) {         // '&& (x->reportlist > 0)' ??
-            clock_delay(x->tclock, x->reportlist);
-        }
-    }
-}
-*/
 
 void karma_clock_list(t_karma *x)
 {
@@ -1514,7 +1478,7 @@ void karma_record(t_karma *x)
     if (record) {
         if (recalt) {
             sc = 2;
-            sh = 3;         // ?? *
+            sh = 3;         // ?? * (this is wrong?, it is not neccessarily overdub)
         } else {
             sc = 3;
             sh = 2;
@@ -1524,9 +1488,9 @@ void karma_record(t_karma *x)
             if (go) {
                 if (recalt) {
                     sc = 2;
-                    sh = 3; // ?? *
+                    sh = 3; // ?? * (this is wrong?, it is not neccessarily overdub)
                 } else {
-                    sc = 10;
+                    sc = 10;    // !! what is #10 (this is the only place it is set) ?!
                     sh = 4;
                 }
             } else {
@@ -1563,9 +1527,9 @@ void karma_record(t_karma *x)
                 }
                 sc = 1;
                 sh = 5;
-            } else {
-                sc = 11;
-                sh = 2;
+            } else {            // !! not 'record', not 'append', is 'go' ??
+                sc = 11;        // !! what is #11 (this is the only place it is set) ?!
+                sh = 3;         // !! is this overdub ?!
             }
         }
     }
@@ -1677,7 +1641,7 @@ void karma_append(t_karma *x)
             x->statehuman = 4;  // ??
             x->stopallowed = 1;
         } else {
-            object_error((t_object *)x, "can't append if already appending, or during creating 'initial-loop', or if buffer~ is completely filled");
+            object_error((t_object *)x, "can't append if already appending, or during 'initial-loop', or if buffer~ is full");
         }
     } else {
         object_error((t_object *)x, "warning! no 'append' registered until at least one loop has been created first");
@@ -1709,7 +1673,7 @@ void karma_jump(t_karma *x, double jumpposition)
         if ( !((x->looprecord)&&(!x->record)) ) {
             x->statecontrol = 8;
             x->jumphead = jumpposition;
-//          x->statehuman = 1;                  // NO ?? ...
+//          x->statehuman = 1;                  // no - 'jump' is whatever statehuman currently is (most likely 'play')
             x->stopallowed = 1;
         }
     }
@@ -1723,15 +1687,18 @@ t_max_err karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, v
     return buffer_ref_notify(x->buf, s, msg, sndr, dat);
 }
 */
-// N.B. ??
+// OR ??
 t_max_err karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat)
 {
     t_symbol *bufnamecheck = (t_symbol *)object_method((t_object *)sndr, gensym("getname"));
  
-    if (bufnamecheck == x->bufname)     // check if calling object was the buffer
-        return  buffer_ref_notify(x->buf, s, msg, sndr, dat);   // return with the calling buffer
-    else                                // if calling object was none of the expected buffers
-        return  MAX_ERR_NONE;                                   // return generic MAX_ERR_NONE
+    if (bufnamecheck == x->bufname) {   // check if calling object was the buffer...
+        if (msg == ps_buffer_modified)
+            x->buf_modified = true;     // set flag
+        return  buffer_ref_notify(x->buf, s, msg, sndr, dat);   // ...return with the calling buffer
+    } else {                            // if calling object was none of the expected buffers...
+        return  MAX_ERR_NONE;                                   // ...return generic MAX_ERR_NONE
+    }
 }
 
 void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long vecount, long flags)
@@ -1787,13 +1754,13 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     double *out1  = outs[0];// mono out
     double *outPh = syncoutlet ? outs[1] : 0;   // sync (if arg #3 is on)
 
-    int n = vcount; // !!
+    int n = vcount;         // !!
     
     double accuratehead, maxhead, jumphead, srscale, speedsrscaled, recplaydif, pokesteps;
     double speed, osamp1, overdubamp, overdubprev, ovdbdif, selstart, selection;
     double o1prev, o1dif, frac, snrfade, globalramp, snrramp, writeval1, coeff1, recin1;
     t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
-    char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
+    char direction, directionprev, directionorig, statecontrol, /*statehuman,*/ playfadeflag, recfadeflag, recendmark;
     t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, nchan, snrtype, interp;
     t_ptr_int frames, startloop, endloop, playhead, recordhead, minloop, maxloop, setloopsize;
     
@@ -1818,6 +1785,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
 
     go              = x->go;
     statecontrol    = x->statecontrol;
+    //statehuman    = x->statehuman;
     playfadeflag    = x->playfadeflag;
     recfadeflag     = x->recfadeflag;
     recordhead      = x->recordhead;
@@ -1862,38 +1830,41 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
         case 1:             // case 1: record init
             record = go = triginit = looprecord = 1;
             recordfade = recfadeflag = playfade = playfadeflag = statecontrol = 0;
+            //statehuman = 5;
             break;
-        case 2:             // case 2: record recordalt
+        case 2:             // case 2: record recordalt (wtf is 'recordalt' ('rectoo') ?!)
             recendmark = 3;
             record = recfadeflag = playfadeflag = 1;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 3:             // case 3: record off reg
+        case 3:             // case 3: record off reg (wtf is 'reg' ?!)
             recfadeflag = 1;
             playfadeflag = 3;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 4:             // case 4: play recordalt
+        case 4:             // case 4: play recordalt (wtf is 'recordalt' ('rectoo') ?!)
             recendmark = 2;
             recfadeflag = playfadeflag = 1;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 5:             // case 5: play on reg
+        case 5:             // case 5: play on reg (wtf is 'reg' ?!)
             triginit = 1;
             statecontrol = 0;
             break;
-        case 6:             // case 6: stop recordalt
+        case 6:             // case 6: stop recordalt (wtf is 'recordalt' ('rectoo') ?!)
             playfade = recordfade = 0;
             recendmark = playfadeflag = recfadeflag = 1;
             statecontrol = 0;
             break;
-        case 7:             // case 7: stop reg
+        case 7:             // case 7: stop reg (wtf is 'reg' ?!)
             if (record) {
                 recordfade = 0;
                 recfadeflag = 1;
             }
-            playfade = 0;
-            playfadeflag = 1;
+            else {          // !!!!!!!!!! ELSE ?!?!?!?!?!   // otherwise playback is silent after 'append' ??...
+                playfade = 0;
+                playfadeflag = 1;
+            }               // !! .../
             statecontrol = 0;
             break;
         case 8:             // case 8: jump
@@ -1909,13 +1880,15 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             playfadeflag = 4;
             playfade = 0;
             statecontrol = 0;
+            //statehuman = 4;
             break;
         case 10:            // case 10: special case append
             record = looprecord = recordalt = 1;
             snrfade = 0.0;
             recordfade = recfadeflag = statecontrol = 0;
+            //statehuman = 4;
             break;
-        case 11:            // case 11: record on reg
+        case 11:            // case 11: record on reg (wtf is 'reg' ?!)
             playfadeflag = 3;
             recfadeflag = 5;
             recordfade = playfade = statecontrol = 0;
@@ -2793,6 +2766,7 @@ apned:
     x->record           = record;
     x->recordprev       = recordprev;
     x->statecontrol     = statecontrol;
+    //x->statehuman     = statehuman;
     x->playfadeflag     = playfadeflag;
     x->recfadeflag      = recfadeflag;
     x->playfade         = playfade;
