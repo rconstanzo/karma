@@ -1259,9 +1259,9 @@ void karma_clock_list(t_karma *x)
         atom_setfloat(  datalist + 0,    normalisedposition                 );                                      // position float normalised 0..1
         atom_setlong(   datalist + 1,    go         );                                                              // play flag int    // pointless
         atom_setlong(   datalist + 2,    record     );  //                          ((minloop + 1) / bmsr) // ??    // record flag int  // pointless
-        atom_setfloat(  datalist + 3, (  directflag ? ((frames - setloopsize) / bmsr) : (minloop / bmsr) )  );      // start float ms
-        atom_setfloat(  datalist + 4, (  directflag ? (frames / bmsr) : (maxloop / bmsr) )                  );      // end float ms
-        atom_setfloat(  datalist + 5, ( (selection * setloopsize) / bmsr)   );//    ((maxloop + 1) / bmsr)          // window float ms
+        atom_setfloat(  datalist + 3, (  directflag ? ((frames - setloopsize) / bmsr) : ((minloop) / bmsr) )    );  // start float ms
+        atom_setfloat(  datalist + 4, (  directflag ? (frames / bmsr) : ((maxloop + 1) / bmsr) )                );  // end float ms
+        atom_setfloat(  datalist + 5, ( (selection * (setloopsize + 1)) / bmsr)   );//    ((maxloop + 1) / bmsr)    // window float ms
         atom_setlong(   datalist + 6,    statehuman );  // (selection * (setloopsize + 1))  // ??                   // state flag int
         
         outlet_list(x->messout, 0L, 7, datalist);
