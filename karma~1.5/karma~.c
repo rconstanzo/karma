@@ -53,9 +53,7 @@
 //  //  //  fix: a bunch of bugs & stuff, incl. ...
 //  //  //  - perform loop in/out updating relating to inability to call multiple methods to the object ...
 //  //  //  ... by using comma-separated message boxes (etc) <<-- big bug, probably unfixable until version 2 rewrite
-//  //  //  - 'statehuman' (statemachine) output (including the overdub notify bug)
-//  //  //  - switching buffer whilst recording can break all shit
-//  //  //  - 'append' is fucked
+//  //  //  - when switching buffer whilst recording, new buffer does not behave like 'inital loop' on 'stop' / 'play'
 
 //  //  //  TODO version 2.0:
 //  //  //  rewrite from scratch, take multiple perform routines out and put
@@ -69,7 +67,7 @@
 #include "math.h"
 
 #include "ext.h"            // max
-#include "ext_obex.h"       // api
+#include "ext_obex.h"       // attributes
 
 #include "ext_buffer.h"     // buffer~
 #include "z_dsp.h"          // msp
@@ -86,21 +84,21 @@
 // ^^ 'SPLINE_INTERP' should be 'void inline' to save on f multiplies   // ^^                               // ^^
 
 
-// karma~
 typedef struct _karma {
     
-    t_pxobject       ob;
+    t_pxobject       k_ob;
     t_buffer_ref    *buf;
     t_buffer_ref    *buf_temp;      // so that 'set' errors etc do not interupt current buf playback ...
     t_symbol        *bufname;
     t_symbol        *bufname_temp;  // ...
 
-    double  sr;             // system samplerate
+    double  ssr;            // system samplerate
     double  bsr;            // buffer samplerate
     double  bmsr;           // buffer samplerate in samples-per-millisecond
     double  srscale;        // scaling factor: buffer samplerate / system samplerate ("to scale playback speeds appropriately")
     double  vs;             // system vectorsize
     double  vsnorm;         // normalised system vectorsize
+    double  bvsnorm;        // normalised buffer vectorsize
 
     double  o1prev;         // previous sample value of "osamp1" etc...
     double  o2prev;         // ...
@@ -115,7 +113,7 @@ typedef struct _karma {
     double  writeval3;      // ...
     double  writeval4;
 
-    double  playhead;       // play head position in samples (double so that "capable of tracking playhead position in floating-point indices")
+    double  playhead;       // play head position in samples (raja: "double so that capable of tracking playhead position in floating-point indices")
     double  maxhead;        // maximum playhead position that the recording has gone into the buffer~ in samples  // ditto
     double  jumphead;       // jump position (in terms of phase 0..1 of loop) <<-- of 'loop', not 'buffer~'
     double  selstart;       // start position of window ('selection') within loop set by the 'position $1' message sent to object (in phase 0..1)
@@ -124,15 +122,17 @@ typedef struct _karma {
     double  snrfade;        // fade counter for switch n ramp, normalised 0..1 ??
     double  overdubamp;     // overdub amplitude 0..1 set by 'overdub $1' message sent to object
     double  overdubprev;    // a 'current' overdub amount ("for smoothing overdub amp changes")
+    double  speedfloat;     // store speed inlet value if float (not signal)
 
-    long    syncoutlet;     // make sync outlet ? (object arg #3: 0/1 flag) <<-- TODO: switch to private @ttribute instead
+    long    syncoutlet;     // make sync outlet ? (object attribute @syncout, instantiation time only)
 //  long    boffset;        // zero indexed buffer channel # (default 0), user settable, not buffer~ queried -->> TODO
     long    moduloout;      // modulo playback channel outputs flag, user settable, not buffer~ queried -->> TODO
     long    islooped;       // can disable/enable global looping status (rodrigo @ttribute request, TODO) (!! long ??)
 
-    t_ptr_int   bframes;    // # of buffer frames (stereo has 2 samples per frame, etc.)
-    t_ptr_int   bchans;     // number of buffer channels
-    t_ptr_int   chans;      // number of audio channels choice (object arg #2: 1 / 2 / 4)
+    t_ptr_int   bframes;    // number of buffer frames (number of floats long the buffer is for a single channel)
+    t_ptr_int   bchans;     // number of buffer channels (number of floats in a frame, stereo has 2 samples per frame, etc.)
+    t_ptr_int   ochans;     // number of object audio channels (object arg #2: 1 / 2 / 4)
+    t_ptr_int   nchans;     // number of channels to actually address (use only channel one if 'ochans' == 1, etc.)
 
     t_ptr_int   interpflag; // playback interpolation, 0 = linear, 1 = cubic, 2 = spline (!! why is this a t_ptr_int ??)
     t_ptr_int   recordhead; // record head position in samples
@@ -148,6 +148,8 @@ typedef struct _karma {
     t_ptr_int   snrtype;    // switch n ramp curve option choice (!! why is this a t_ptr_int ??)
     t_ptr_int   reportlist; // right list outlet report granularity in ms (!! why is this a t_ptr_int ??)
     
+    short   speedconnect;   // 'count[]' info for 'speed' as signal or float in perform routines
+
     char    statecontrol;   // master looper state control (not 'human state')
     char    statehuman;     // master looper state human logic (not 'statecontrol') (0=stop, 1=play, 2=record, 3=overdub, 4=append 5=initial)
 
@@ -166,24 +168,26 @@ typedef struct _karma {
     t_bool  append;         // append flag ??
     t_bool  triginit;       // flag to show trigger start of initial-loop creation (?)
     t_bool  wrapflag;       // flag to show if a window selection wraps around the buffer~ end / beginning
-    t_bool  jumpflag;       // whether jump is 'on' or 'off' (flag to block jumps from coming too soon ??)
+    t_bool  jumpflag;       // whether jump is 'on' or 'off' ("flag to block jumps from coming too soon" ??)
 
-    t_bool  recordinit;     // initial recording ("...flag to determine whether to apply the 'record' message to initial loop recording or not")
+    t_bool  recordinit;     // initial recording (raja: "...flag to determine whether to apply the 'record' message to initial loop recording or not")
     t_bool  initinit;       // initial initialise (raja: "...hack i used to determine whether DSP is turned on for the very first time or not")
     t_bool  initskip;       // is initialising = 0
     t_bool  buf_modified;   // buffer has been modified bool
     t_bool  clockgo;        // activate clock (for list outlet)
 
-//  t_atom   datalist[7];   // !! TODO - store list ??
     void    *messout;       // list outlet pointer
     void    *tclock;        // list timer pointer
 
 } t_karma;
 
+t_max_err   karma_syncout_set(t_karma *x, t_object *attr, long argc, t_atom *argv);
+//t_max_err karma_syncout_get(t_karma *x, t_object *attr, long *argc, t_atom **argv);
 
 void       *karma_new(t_symbol *s, short argc, t_atom *argv);
 void        karma_free(t_karma *x);
 
+void        karma_float(t_karma *x, double speedfloat);
 void        karma_stop(t_karma *x);
 void        karma_play(t_karma *x);
 void        karma_record(t_karma *x);
@@ -202,7 +206,7 @@ void        karma_setloop(t_karma *x, t_symbol *s, short ac, t_atom *av);
 //void      karma_loop_multiply(t_karma *x, double multiplier); // <<-- TODO
 
 void        karma_buf_setup(t_karma *x, t_symbol *s);
-void        karma_buf_modset(t_karma *x, t_buffer_obj *b);
+void        karma_buf_modify(t_karma *x, t_buffer_obj *b);
 void        karma_clock_list(t_karma *x);
 //void      karma_buf_values_internal(t_karma *x, double low, double high, long loop_points_flag, t_bool caller);
 //void      karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv);
@@ -265,7 +269,7 @@ static inline double ease_switchramp(double y1, double snrfade, t_ptr_int snrtyp
 }
 
 // easing function for buffer read
-static inline void ease_bufoff(t_ptr_int framesm1, float *b, t_ptr_int nchan, t_ptr_int markposition, char direction, double globalramp)
+static inline void ease_bufoff(t_ptr_int framesm1, float *b, t_ptr_int pchans, t_ptr_int markposition, char direction, double globalramp)
 {
     long i, fadpos;
     
@@ -275,19 +279,19 @@ static inline void ease_bufoff(t_ptr_int framesm1, float *b, t_ptr_int nchan, t_
         
         if ( !((fadpos < 0) || (fadpos > framesm1)) )
         {
-            b[fadpos * nchan] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+            b[fadpos * pchans] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
             
-            if (nchan > 1)
+            if (pchans > 1)
             {
-                b[(fadpos * nchan) + 1] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+                b[(fadpos * pchans) + 1] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
                 
-                if (nchan > 2)
+                if (pchans > 2)
                 {
-                    b[(fadpos * nchan) + 2] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+                    b[(fadpos * pchans) + 2] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
                     
-                    if (nchan > 3)
+                    if (pchans > 3)
                     {
-                        b[(fadpos * nchan) + 3] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+                        b[(fadpos * pchans) + 3] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
                     }
                 }
             }
@@ -298,7 +302,7 @@ static inline void ease_bufoff(t_ptr_int framesm1, float *b, t_ptr_int nchan, t_
 }
 
 // easing function for buffer write
-static inline void ease_bufon(t_ptr_int framesm1, float *b, t_ptr_int nchan, t_ptr_int markposition1, t_ptr_int markposition2, char direction, double globalramp)
+static inline void ease_bufon(t_ptr_int framesm1, float *b, t_ptr_int pchans, t_ptr_int markposition1, t_ptr_int markposition2, char direction, double globalramp)
 {
     long i, fadpos1, fadpos2, fadpos3;
     
@@ -310,19 +314,19 @@ static inline void ease_bufon(t_ptr_int framesm1, float *b, t_ptr_int nchan, t_p
         
         if ( !((fadpos1 < 0) || (fadpos1 > framesm1)) )
         {
-            b[fadpos1 * nchan] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+            b[fadpos1 * pchans] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
             
-            if (nchan > 1)
+            if (pchans > 1)
             {
-                b[(fadpos1 * nchan) + 1] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+                b[(fadpos1 * pchans) + 1] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
                 
-                if (nchan > 2)
+                if (pchans > 2)
                 {
-                    b[(fadpos1 * nchan) + 2] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+                    b[(fadpos1 * pchans) + 2] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
                     
-                    if (nchan > 3)
+                    if (pchans > 3)
                     {
-                        b[(fadpos1 * nchan) + 3] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+                        b[(fadpos1 * pchans) + 3] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
                     }
                 }
             }
@@ -330,19 +334,19 @@ static inline void ease_bufon(t_ptr_int framesm1, float *b, t_ptr_int nchan, t_p
         
         if ( !((fadpos2 < 0) || (fadpos2 > framesm1)) )
         {
-            b[fadpos2 * nchan] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+            b[fadpos2 * pchans] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
             
-            if (nchan > 1)
+            if (pchans > 1)
             {
-                b[(fadpos2 * nchan) + 1] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+                b[(fadpos2 * pchans) + 1] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
                 
-                if (nchan > 2)
+                if (pchans > 2)
                 {
-                    b[(fadpos2 * nchan) + 2] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+                    b[(fadpos2 * pchans) + 2] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
                     
-                    if (nchan > 3)
+                    if (pchans > 3)
                     {
-                        b[(fadpos2 * nchan) + 3] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+                        b[(fadpos2 * pchans) + 3] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
                     }
                 }
             }
@@ -350,19 +354,19 @@ static inline void ease_bufon(t_ptr_int framesm1, float *b, t_ptr_int nchan, t_p
         
         if ( !((fadpos3 < 0) || (fadpos3 > framesm1)) )
         {
-            b[fadpos3 * nchan] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+            b[fadpos3 * pchans] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
             
-            if (nchan > 1)
+            if (pchans > 1)
             {
-                b[(fadpos3 * nchan) + 1] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+                b[(fadpos3 * pchans) + 1] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
                 
-                if (nchan > 2)
+                if (pchans > 2)
                 {
-                    b[(fadpos3 * nchan) + 2] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+                    b[(fadpos3 * pchans) + 2] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
                     
-                    if (nchan > 3)
+                    if (pchans > 3)
                     {
-                        b[(fadpos3 * nchan) + 3] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
+                        b[(fadpos3 * pchans) + 3] *= 0.5 * ( 1.0 - cos( (((double)i) / globalramp) * PI));
                     }
                 }
             }
@@ -427,12 +431,236 @@ static inline void interp_index(t_ptr_int playhead, t_ptr_int *indx0, t_ptr_int 
     return;
 }
 
+/*
+static inline void calculate_head(char directionorig, double maxhead, t_ptr_int frames, t_ptr_int minloop, double selstart, double selection, char direction, double globalramp, float b, t_ptr_int pchans, t_bool record, t_bool jumpflag, double jumphead, t_ptr_int *maxloop, t_ptr_int *setloopsize, double *accuratehead, t_ptr_int *startloop, t_ptr_int *endloop, t_bool *wrapflag, t_ptr_int *recordhead, double *snrfade, t_bool *append, t_bool *recordalt, char *recendmark, t_bool *triginit, double *speedsrscaled, t_ptr_int *recordfade, char *recfadeflag)
+{
+    if (triginit)
+    {
+        if (recendmark)  // calculate end of loop
+        {
+            if (directionorig >= 0)
+            {
+                maxloop = CLAMP(maxhead, 4096, frames - 1);
+                setloopsize = maxloop - minloop;
+                accuratehead = startloop = minloop + (selstart * setloopsize);
+                endloop = startloop + (selection * setloopsize);
+                if (endloop > maxloop) {
+                    endloop = endloop - (setloopsize + 1);
+                    wrapflag = 1;
+                } else {
+                    wrapflag = 0;
+                }
+                if (direction < 0) {
+                    if (globalramp)
+                        ease_bufon(frames - 1, &b, pchans, accuratehead, recordhead, direction, globalramp);
+                }
+            } else {
+                maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
+                setloopsize = maxloop - minloop;    // ((frames - 1) - setloopsize - minloop)   // ??
+                startloop = ((frames - 1) - setloopsize) + (selstart * setloopsize);    // ((frames - 1) - maxloop) + (selstart * maxloop);   // ??
+                accuratehead = endloop = startloop + (selection * setloopsize);         // startloop + (selection * maxloop);   ??
+                if (endloop > (frames - 1)) {
+                    endloop = ((frames - 1) - setloopsize) + (endloop - frames);
+                    wrapflag = 1;
+                } else {
+                    wrapflag = 0;
+                }
+                accuratehead = endloop;
+                if (direction > 0) {
+                    if (globalramp)
+                        ease_bufon(frames - 1, &b, pchans, accuratehead, recordhead, direction, globalramp);
+                }
+            }
+            if (globalramp)
+                ease_bufoff(frames - 1, &b, pchans, maxhead, -direction, globalramp);
+            recordhead = -1;
+            snrfade = 0.0;
+            triginit = 0;
+            append = recordalt = recendmark = 0;
+        } else {    // jump / play (inside 'window')
+            setloopsize = maxloop - minloop;
+            if (jumpflag)
+                accuratehead = (directionorig >= 0) ? ((jumphead * setloopsize) + minloop) : (((frames - 1) - maxloop) + (jumphead * setloopsize));
+            else
+                accuratehead = (direction < 0) ? endloop : startloop;
+            if (record) {
+                if (globalramp) {
+                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
+                    recordfade = 0;
+                }
+                recordhead = -1;
+                recfadeflag = 0;
+            }
+            snrfade = 0.0;
+            triginit = 0;
+        }
+    } else {        // jump-based constraints (outside 'window')
+        setloopsize = maxloop - minloop;
+        speedsrscaled = speed * srscale;
+        
+        if (record)
+            speedsrscaled = (fabs(speedsrscaled) > (setloopsize / 1024)) ? ((setloopsize / 1024) * direction) : speedsrscaled;
+        accuratehead = accuratehead + speedsrscaled;
+        
+        if (jumpflag)
+        {
+            if (wrapflag) {
+                if ((accuratehead < endloop) || (accuratehead > startloop))
+                    jumpflag = 0;
+            } else {
+                if ((accuratehead < endloop) && (accuratehead > startloop))
+                    jumpflag = 0;
+            }
+            if (directionorig >= 0)
+            {
+                if (accuratehead > maxloop)
+                {
+                    accuratehead = accuratehead - setloopsize;
+                    snrfade = 0.0;
+                    if (record) {
+                        if (globalramp) {
+                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
+                            recordfade = 0;
+                        }
+                        recfadeflag = 0;
+                        recordhead = -1;
+                    }
+                } else if (accuratehead < 0.0) {
+                    accuratehead = maxloop + accuratehead;
+                    snrfade = 0.0;
+                    if (record) {
+                        if (globalramp) {
+                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
+                            recordfade = 0;
+                        }
+                        recfadeflag = 0;
+                        recordhead = -1;
+                    }
+                }
+            } else {
+                if (accuratehead > (frames - 1))
+                {
+                    accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...((frames - 1) - maxloop)...   // ??
+                    snrfade = 0.0;
+                    if (record) {
+                        if (globalramp) {
+                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
+                            recordfade = 0;
+                        }
+                        recfadeflag = 0;
+                        recordhead = -1;
+                    }
+                } else if (accuratehead < ((frames - 1) - maxloop)) {
+                    accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...((frames - 1) - maxloop)... // ??
+                    snrfade = 0.0;
+                    if (record) {
+                        if (globalramp) {
+                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
+                            recordfade = 0;
+                        }
+                        recfadeflag = 0;
+                        recordhead = -1;
+                    }
+                }
+            }
+        } else {    // regular 'window' / 'position' constraints
+            if (wrapflag)
+            {
+                if ((accuratehead > endloop) && (accuratehead < startloop))
+                {
+                    accuratehead = (direction >= 0) ? startloop : endloop;
+                    snrfade = 0.0;
+                    if (record) {
+                        if (globalramp) {
+                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
+                            recordfade = 0;
+                        }
+                        recfadeflag = 0;
+                        recordhead = -1;
+                    }
+                } else if (directionorig >= 0) {
+                    if (accuratehead > maxloop)
+                    {
+                        accuratehead = accuratehead - setloopsize;  // fixed position ??
+                        snrfade = 0.0;
+                        if (record) {
+                            if (globalramp) {
+                                ease_bufoff(frames - 1, b, pchans, maxloop, -direction, globalramp);
+                                recordfade = 0;
+                            }
+                            recfadeflag = 0;
+                            recordhead = -1;
+                        }
+                    }
+                    else if (accuratehead < 0.0)
+                    {
+                        accuratehead = maxloop + setloopsize;       // !! this is surely completely wrong ??
+                        snrfade = 0.0;
+                        if (record) {
+                            if (globalramp) {
+                                ease_bufoff(frames - 1, b, pchans, minloop, -direction, globalramp);     // 0.0  // ??
+                                recordfade = 0;
+                            }
+                            recfadeflag = 0;
+                            recordhead = -1;
+                        }
+                    }
+                } else {    // reverse
+                    if (accuratehead < ((frames - 1) - maxloop))
+                    {
+                        accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...- maxloop)... // ??
+                        snrfade = 0.0;
+                        if (record)
+                        {
+                            if (globalramp) {
+                                ease_bufoff(frames - 1, b, pchans, ((frames - 1) - maxloop), -direction, globalramp);
+                                recordfade = 0;
+                            }
+                            recfadeflag = 0;
+                            recordhead = -1;
+                        }
+                    } else if (accuratehead > (frames - 1)) {
+                        accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...- maxloop)...   // ??
+                        snrfade = 0.0;
+                        if (record) {
+                            if (globalramp) {
+                                ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
+                                recordfade = 0;
+                            }
+                            recfadeflag = 0;
+                            recordhead = -1;
+                        }
+                    }
+                }
+            } else {    // (not wrapflag)
+                if ((accuratehead > endloop) || (accuratehead < startloop))
+                {
+                    accuratehead = (direction >= 0) ? startloop : endloop;
+                    snrfade = 0.0;
+                    if (record) {
+                        if (globalramp) {
+                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
+                            recordfade = 0;
+                        }
+                        recfadeflag = 0;
+                        recordhead = -1;
+                    }
+                }
+            }
+        }
+    }
+    
+    return;
+    
+}
+*/
+
 //  //  //
 
 void ext_main(void *r)
 {
     t_class *c = class_new("karma~", (method)karma_new, (method)karma_free, (long)sizeof(t_karma), 0L, A_GIMME, 0);
-    
+
     // @method position @digest window position start
     // @description window position start point (in phase 0..1) <br />
     // @marg 0 @name start_position @optional 0 @type float
@@ -457,7 +685,7 @@ void ext_main(void *r)
     // @method append @digest (get ready for) append recording
     // @description (get ready for) append recording to end of currently used segment (as long as buffer space available) <br />
     class_addmethod(c, (method)karma_append,        "append",               0);
-    // @method multiply @digest loop size multiplier
+    // @method multiply @digest loop content multiplier
     // @description mutiply the current loop size by this factor. <br />
     // @marg 0 @name multiplier @optional 0 @type float
 //  class_addmethod(c, (method)karma_loop_multiply, "multiply", A_FLOAT,    0);     // !! TODO
@@ -484,11 +712,21 @@ void ext_main(void *r)
     // @description amplitude (0..1) for when in overdubbing state <br />
     // @marg 0 @name overdub @optional 0 @type float
     class_addmethod(c, (method)karma_overdub,       "overdub",  A_FLOAT,    0);     // !! A_GIMME ?? (for amplitude + smooth time)
+    // @method float @digest optional speed inlet float
+    // @description  <br />
+    // @marg 0 @name float @optional 0 @type float
+    class_addmethod(c, (method)karma_float,         "float",    A_FLOAT,    0);
     
     class_addmethod(c, (method)karma_dsp64,         "dsp64",    A_CANT,     0);
     class_addmethod(c, (method)karma_assist,        "assist",   A_CANT,     0);
     class_addmethod(c, (method)karma_buf_dblclick,  "dblclick", A_CANT,     0);
     class_addmethod(c, (method)karma_buf_notify,    "notify",   A_CANT,     0);
+
+    CLASS_ATTR_LONG(c, "syncout", 0, t_karma, syncoutlet);
+    CLASS_ATTR_ACCESSORS(c, "syncout", (method)NULL, (method)karma_syncout_set);    // custom for using at instantiation
+    CLASS_ATTR_LABEL(c, "syncout", 0, "Create audio rate Sync Outlet no/yes 0/1");  // not needed ?
+    CLASS_ATTR_INVISIBLE(c, "syncout", 0);                      // do not expose to user, only callable as instantiation attribute
+    // @description Set as <m>integer</m> flag <b>0</b> or <b>1</b>. With <m>syncout</m> switched on, <o>karma~</o> will add an additional audio signal outlet to the object, after the audio outs and before the final data outlet. This outlet is an audio rate sync signal 0..1 for audio rate synchronous matching to other MSP processes. With <m>syncout</m> switched off (the default), <o>karma~</o> will have no additional outlets. This attribute cannot be sent to the object dynamically or changed in the inspector - it is only available at instantiation time. <br />
 
     CLASS_ATTR_LONG(c, "report", 0, t_karma, reportlist);       // !! change to "reporttime" or "listreport" or "listinterval" ??
     CLASS_ATTR_FILTER_MIN(c, "report", 0);
@@ -517,12 +755,6 @@ void ext_main(void *r)
     CLASS_ATTR_LABEL(c, "interp", 0, "Playback Interpolation");
     // @description Type of <b>interpolation</b> used in audio playback. Default <b>Cubic</b> <br />
 /*
-    CLASS_ATTR_LONG(c, "syncout", 0, t_karma, syncoutlet);      // !! TODO !!
-    CLASS_ATTR_FILTER_CLIP(c, "syncout", 0, 1);
-    CLASS_ATTR_INVISIBLE(c, "syncout", 0);                      // do not expose to user, only callable as instantiation attribute
-    //CLASS_ATTR_LABEL(c, "syncout", 0, "Create audio rate Sync Outlet no / yes");
-    // @description Set as <m>integer</m> flag <b>0</b> or <b>1</b>. With <m>syncout</m> switched on, <o>karma~</o> will add an additional audio signal outlet to the object, after the audio outs and before the final data outlet. This outlet is an audio rate sync signal 0..1 for audio rate synchronous matching to other MSP processes. With <m>syncout</m> switched off (the default), <o>karma~</o> will have no additional outlets. This attribute cannot be sent to the object dynamically or changed in the inspector - it is only available at instantiation time. <br />
-
     CLASS_ATTR_LONG(c, "loop", 0, t_karma, islooped);           // !! TODO !!
     CLASS_ATTR_FILTER_CLIP(c, "loop", 0, 1);
     CLASS_ATTR_LABEL(c, "loop", 0, "Loop off / on");
@@ -567,7 +799,7 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
 
     // !! TODO: argument checks !!
     if (attrstart && argv) {
-        bufname = atom_getsym(argv);
+        bufname = atom_getsym(argv + 0);
         // @arg 0 @name buffer_name @optional 0 @type symbol @digest Name of <o>buffer~</o> to be associated with the <o>karma~</o> instance
         // @description Essential argument: <o>karma~</o> will not operate without an associated <o>buffer~</o> <br />
         // The associated <o>buffer~</o> determines memory and length (if associating a buffer~ of <b>0 ms</b> in size <o>karma~</o> will do nothing) <br />
@@ -575,8 +807,7 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
         if (attrstart > 1) {
             chans = atom_getlong(argv + 1);
             if (attrstart > 2) {
-                syncoutlet = atom_getlong(argv + 2);
-                syncoutlet = CLAMP(syncoutlet, 0, 1);
+                object_error((t_object *)x, "rodrigo! third arg no longer used! use new @syncout attribute instead!");
             }
         }
 /*  } else {
@@ -597,13 +828,13 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
         }
         
         x->recordhead = -1;
-        x->reportlist = 50;
-        x->snrramp = x->globalramp = 256;
-        x->playfade = x->recordfade = 257;  // ??
-        x->sr = sys_getsr();
+        x->reportlist = 50; // ms
+        x->snrramp = x->globalramp = 256;   // samps...
+        x->playfade = x->recordfade = 257;  // ...
+        x->ssr = sys_getsr();
         x->vs = sys_getblksize();
-        x->vsnorm = x->vs / x->sr;
-        x->overdubprev = x->overdubamp = 1.0;
+        x->vsnorm = x->vs / x->ssr;
+        x->overdubprev = x->overdubamp = x->speedfloat = 1.0;
         x->islooped = x->snrtype = x->interpflag = 1;
         x->playfadeflag = x->recfadeflag = x->recordinit = x->initinit = x->append = x->jumpflag = x->statecontrol = x->statehuman = x->stopallowed = 0;
         x->directionprev = x->directionorig = x->recordprev = x->record = x->recordalt = x->recendmark = x->go = x->triginit = 0;
@@ -612,17 +843,17 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
         x->selstart = x->jumphead = x->snrfade = x->o1dif = x->o2dif = x->o3dif = x->o4dif = x->o1prev = x->o2prev = x->o3prev = x->o4prev = 0.0;
         
         if (bufname != 0)
-            x->bufname = bufname;
+            x->bufname = bufname;   // !! setup is in 'karma_buf_setup()' called by 'karma_dsp64()'
 /*      else
             object_error((t_object *)x, "requires an associated buffer~ declaration");
 */
-        x->syncoutlet = syncoutlet;
+        //x->syncoutlet = syncoutlet;
         // @arg 2 @name sync_outlet @optional 1 @type int @digest Create audio rate sync position outlet ?
         // @description Default = <b>0 (off)</b> <br />
         // If <b>on</b>, <o>karma~</o> will have an additional outlet, after the audio channel outlets,
         // for sending an audio rate sync position outlet in the range <b>0..1</b> <br />
 
-        x->chans = chans;
+        x->ochans = chans;
         // @arg 1 @name num_chans @optional 1 @type int @digest Number of Audio channels
         // @description Default = <b>1 (mono)</b> <br />
         // If <b>1</b>, <o>karma~</o> will operate in mono mode with one input for recording and one output for playback <br />
@@ -630,8 +861,9 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
         // If <b>4</b>, <o>karma~</o> will operate in quad mode with four inputs for recording and four outputs for playback <br />
 
         x->messout = listout(x);    // data
-        x->tclock = clock_new((t_object * )x, (method)karma_clock_list);
+        x->tclock  = clock_new((t_object * )x, (method)karma_clock_list);
         attr_args_process(x, argc, argv);
+        syncoutlet = x->syncoutlet; // pre-init
         
         if (chans <= 1) {           // mono
             if (syncoutlet)
@@ -652,7 +884,7 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
         }
 
         x->initskip = 1;
-        x->ob.z_misc |= Z_NO_INPLACE;
+        x->k_ob.z_misc |= Z_NO_INPLACE;
     }
 
 //zero:
@@ -690,21 +922,23 @@ void karma_buf_setup(t_karma *x, t_symbol *s)
     
     buf = buffer_ref_getobject(x->buf);
     
-/*    if (buf == NULL) {
-        x->buf = 0;
-        object_error((t_object *)x, "there is no buffer~ named %s", s->s_name);
+    if (buf == NULL) {
+        x->buf      = 0;
+        //object_error((t_object *)x, "there is no buffer~ named %s", s->s_name);
     } else {
-*/  if (buf != NULL) {
-        x->directionorig            = 0;
-        x->maxhead  = x->playhead   = 0.0;
+//  if (buf != NULL) {
+        x->directionorig            =  0;
+        x->maxhead  = x->playhead   =  0.0;
         x->recordhead               = -1;
         x->bchans   = buffer_getchannelcount(buf);
         x->bframes  = buffer_getframecount(buf);
         x->bmsr     = buffer_getmillisamplerate(buf);
         x->bsr      = buffer_getsamplerate(buf);
-        x->srscale                  = x->bsr / x->sr;
+        x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
+        x->srscale                  = x->bsr / x->ssr;
+        x->bvsnorm  = x->vsnorm * (x->bsr / (double)x->bframes);
         x->minloop  = x->startloop  = 0.0;
-        x->maxloop  = x->endloop    = (x->bframes - 1);
+        x->maxloop  = x->endloop    = (x->bframes - 1) * x->nchans;//x->bchans; // !!
         x->selstart                 = 0.0;
         x->selection                = 1.0;
 
@@ -712,60 +946,67 @@ void karma_buf_setup(t_karma *x, t_symbol *s)
 }
 
 // called on buffer modified notification
-void karma_buf_modset(t_karma *x, t_buffer_obj *b)
+void karma_buf_modify(t_karma *x, t_buffer_obj *b)
 {
-    double      bsr, bmsr;
-    t_ptr_int   chans;
-    t_ptr_int   frames;
+    double      modbsr, modbmsr;
+    t_ptr_int   modchans, modframes;
     
     if (b) {
-        bsr     = buffer_getsamplerate(b);
-        chans   = buffer_getchannelcount(b);
-        frames  = buffer_getframecount(b);
-        bmsr    = buffer_getmillisamplerate(b);
+        modbsr     = buffer_getsamplerate(b);
+        modchans   = buffer_getchannelcount(b);
+        modframes  = buffer_getframecount(b);
+        modbmsr    = buffer_getmillisamplerate(b);
         
-        if (((x->bchans != chans) || (x->bframes != frames)) || (x->bmsr != bmsr)) {
-            x->bsr                      = bsr;
-            x->bmsr                     = bmsr;
-            x->srscale                  = bsr / x->sr;
-            x->bframes                  = frames;
-            x->bchans                   = chans;
-            x->minloop = x->startloop   = 0.0;
-            x->maxloop = x->endloop     = (x->bframes - 1);
+        if ( ( (x->bchans != modchans) || (x->bframes != modframes) ) || (x->bmsr != modbmsr) ) {
+            x->bsr                      = modbsr;
+            x->bmsr                     = modbmsr;
+            x->srscale                  = modbsr / x->ssr;
+            x->bframes                  = modframes;
+            x->bchans                   = modchans;
+            x->nchans   = (modchans < x->ochans) ? modchans : x->ochans;    // MIN
+            x->minloop  = x->startloop  = 0.0;
+            x->maxloop  = x->endloop    = (x->bframes - 1) * x->nchans;//x->bchans; // !!
+            x->bvsnorm  = x->vsnorm * (modbsr / (double)modframes);
 
             karma_select_size(x, x->selection);
             karma_select_start(x, x->selstart);
 //          karma_select_internal(x, x->selstart, x->selection);
             
-//          post("modset called");      // dev
+            post("buff modify called"); // dev
         }
     }
 }
 
 // called by 'karma_buf_change_internal' & 'karma_setloop_internal'
+// pete says: i know this proof-of-concept branching is horrible, will rewrite soon...
 void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long loop_points_flag, t_bool caller)
 {
-    t_buffer_obj *buf;
 //  t_symbol *loop_points_sym = 0;                      // dev
-    double bframesm1, bframesms, bvsnorm, bvsnorm05;    // bframesm1 not needed ?, bframesms is bollox ?
+    t_buffer_obj *buf;
+    t_ptr_int bchanscnt, bframesm1;
+    double bframesms, bvsnorm, bvsnorm05;               // !!
     double low, lowtemp, high, hightemp;
     low = templow;
     high = temphigh;
 
-    if (caller) {                                       // only if called from 'karma_buf_change_internal'
+        //buf       = buffer_ref_getobject(x->buf);
+    if (caller) {                                       // only if called from 'karma_buf_change_internal()'
         buf         = buffer_ref_getobject(x->buf);
 
         x->bchans   = buffer_getchannelcount(buf);
         x->bframes  = buffer_getframecount(buf);
         x->bmsr     = buffer_getmillisamplerate(buf);
-        x->bsr      = buffer_getsamplerate(buf);        // ...
-        x->srscale  = x->bsr / x->sr;                   // ... !! need to account for channels !!
+        x->bsr      = buffer_getsamplerate(buf);
+        x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
+        x->srscale  = x->bsr / x->ssr;
     }
 
-    bframesm1   = (double)(x->bframes - 1);
-    bframesms   = bframesm1 / x->bmsr * x->srscale;     // buffersize in milliseconds
-    bvsnorm     = x->vsnorm * (x->bsr / bframesm1);     // vectorsize in (double) % 0..1 phase units of buffer~
-    bvsnorm05   = bvsnorm * 0.5;                        // half vectorsize (normalised)
+    bchanscnt   = x->nchans;//x->bchans; // !!
+    bframesm1   = (x->bframes - 1) * bchanscnt;
+    bframesms   = (double)bframesm1 / x->bmsr;                  // buffersize in milliseconds
+    bvsnorm     = x->vsnorm * (x->bsr / (double)x->bframes);    // vectorsize in (double) % 0..1 (phase) units of buffer~
+    bvsnorm05   = bvsnorm * 0.5;                                // half vectorsize (normalised)
+    x->bvsnorm  = bvsnorm;
     
     // by this stage in routine, if LOW < 0., it has not been set and should be set to default (0.) regardless of 'loop_points_flag'
     if (low < 0.)
@@ -776,16 +1017,16 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
         if (high < 0.)
             high = 1.;                                  // already normalised 0..1
         
-        // templow already treated as phase 0..1
+        // (templow already treated as phase 0..1)
     } else if (loop_points_flag == 1) {     // if SAMPLES
         // by this stage in routine, if HIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
         if (high < 0.)
             high = 1.;                                  // already normalised 0..1
         else
-            high = high / bframesm1;                    // normalise samples high 0..1..
+            high = high / (double)bframesm1;            // normalise samples high 0..1..
         
         if (low > 0.)
-            low = low / bframesm1;                      // normalise samples low 0..1..
+            low = low / (double)bframesm1;              // normalise samples low 0..1..
     } else {                                // if MILLISECONDS (default)
         // by this stage in routine, if HIGH < 0., it has not been set and should be set to default (the maximum phase 1.)
         if (high < 0.)
@@ -826,6 +1067,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
             high = high + bvsnorm05;
         }
     }
+    // regardless of input choice ('loop_points_flag'), final low/high system is normalised (& clipped) 0..1 (phase)
     low     = CLAMP(low, 0., 1.);
     high    = CLAMP(high, 0., 1.);
 /*
@@ -834,12 +1076,11 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
     post("loop start normalised %.2f, loop end normalised %.2f, units %s", low, high, *loop_points_sym);
     //post("loop start samples %.2f, loop end samples %.2f, units used %s", (low * bframesm1), (high * bframesm1), *loop_points_sym);
 */
-    // regardless of input choice ('loop_points_flag'), final system is normalised 0..1 (phase)
+    // to samples, and account for channels / buffer samplerate
+    x->minloop = x->startloop = low * bframesm1 * bchanscnt;
+    x->maxloop = x->endloop = high * bframesm1 * bchanscnt;
 
-    x->minloop = x->startloop = low * bframesm1;
-    x->maxloop = x->endloop = high * bframesm1;
-
-    // (always update)
+    // update selection
     karma_select_size(x, x->selection);
     karma_select_start(x, x->selstart);
     //karma_select_internal(x, x->selstart, x->selection);
@@ -847,7 +1088,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
 }
 
 // karma_buf_change method defered
-// pete says: i know this branching is horrible, will rewrite soon...
+// pete says: i know this proof-of-concept branching is horrible, will rewrite soon...
 void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)   // " set ..... "
 {
     t_bool callerid;
@@ -918,7 +1159,7 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
 
             // ... obviously pete is a bit confused about all this ...
             x->directionorig = 0;
-            x->maxhead = x->playhead = 0.0; // x->maxhead = x->playhead;    // ?? ('takeover')
+            x->maxhead = x->playhead;// = 0.0; // x->maxhead = x->playhead;    // ?? ('takeover')
             x->recordhead = -1;
 
             // maximum length message (4[6] atoms after 'set') = " set ...
@@ -1025,6 +1266,7 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
             karma_buf_values_internal(x, templow, temphigh, loop_points_flag, callerid);
 
             //x->buf_temp = 0;                          // should (dsp)free here and not earlier ??
+            //object_free(x->buf_temp);
 
         }
 
@@ -1073,12 +1315,13 @@ void karma_buf_change(t_karma *x, t_symbol *s, short ac, t_atom *av)    // " set
 
     }
 
-    defer(x, (method)karma_buf_change_internal, s, ac, store_av);       // main method
+    defer(x, (method)karma_buf_change_internal, s, ac, store_av);     // main method
+    //karma_buf_change_internal(x, s, ac, store_av);
 
 }
 
 // karma_setloop method defered
-// pete says: i know this branching is horrible, will rewrite soon...
+// pete says: i know this proof-of-concept branching is horrible, will rewrite soon...
 void karma_setloop_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv)   // " setloop ..... "
 {
     t_bool callerid = false;                // identify caller of 'karma_buf_values_internal()'
@@ -1197,41 +1440,41 @@ void karma_setloop(t_karma *x, t_symbol *s, short ac, t_atom *av)   // " setloop
 
 void karma_clock_list(t_karma *x)
 {
-    if (x->reportlist > 0)      // ('reportlist 0' == off, else milliseconds)
+    t_bool rlgtz = x->reportlist > 0;
+    
+    if (rlgtz)                                                  // ('reportlist 0' == off, else milliseconds)
     {
         t_ptr_int frames        = x->bframes - 1;
-//      t_ptr_int endloop       = x->endloop;
-//      t_ptr_int startloop     = x->startloop;
         t_ptr_int minloop       = x->minloop;
         t_ptr_int maxloop       = x->maxloop;
-        t_ptr_int directflag    = x->directionorig < 0;         // !! reverse = 1, forward = 0
+        t_ptr_int setloopsize   = maxloop - minloop;
         
-        t_bool record   = x->record;
-        t_bool go       = x->go;
+        t_bool directflag   = x->directionorig < 0;             // !! reverse = 1, forward = 0
+        t_bool record       = x->record;
+        t_bool go           = x->go;
         
-        char statehuman = x->statehuman;
+        char statehuman     = x->statehuman;
         
         double bmsr         = x->bmsr;
         double playhead     = x->playhead;
         double selection    = x->selection;
-        double setloopsize, normalisedposition;
-        
-        setloopsize         = maxloop - minloop;    //  ((playhead-(frames-maxloop))/setloopsize) : ((playhead-startloop)/setloopsize)  // ??
+        double normalisedposition;
+                                                    //  ((playhead-(frames-maxloop))/setloopsize) : ((playhead-startloop)/setloopsize)  // ??
         normalisedposition  = CLAMP( directflag ? ((playhead-(frames-setloopsize))/setloopsize) : ((playhead-minloop)/setloopsize), 0., 1. );
         
         t_atom datalist[7];                                     // !! reverse logics ??
-        atom_setfloat(  datalist + 0,    normalisedposition                 );                                      // position float normalised 0..1
+        atom_setfloat(  datalist + 0,    normalisedposition                     );                                  // position float normalised 0..1
         atom_setlong(   datalist + 1,    go         );                                                              // play flag int    // pointless
         atom_setlong(   datalist + 2,    record     );  //                          ((minloop + 1) / bmsr) // ??    // record flag int  // pointless
         atom_setfloat(  datalist + 3, (  directflag ? ((frames - setloopsize) / bmsr) : ((minloop) / bmsr) )    );  // start float ms
         atom_setfloat(  datalist + 4, (  directflag ? (frames / bmsr) : ((maxloop + 1) / bmsr) )                );  // end float ms
-        atom_setfloat(  datalist + 5, ( (selection * (setloopsize + 1)) / bmsr)   );//    ((maxloop + 1) / bmsr)    // window float ms
+        atom_setfloat(  datalist + 5, ( (selection * (setloopsize + 1)) / bmsr) );//    ((maxloop + 1) / bmsr)      // window float ms
         atom_setlong(   datalist + 6,    statehuman );  // (selection * (setloopsize + 1))  // ??                   // state flag int
         
         outlet_list(x->messout, 0L, 7, datalist);
 //      outlet_list(x->messout, gensym("list"), 7, datalist);
         
-        if (sys_getdspstate() && (x->reportlist > 0)) {         // '&& (x->reportlist > 0)' ??
+        if (sys_getdspstate() && (rlgtz)) {                     // '&& (x->reportlist > 0)' ??
             clock_delay(x->tclock, x->reportlist);
         }
     }
@@ -1240,17 +1483,17 @@ void karma_clock_list(t_karma *x)
 void karma_assist(t_karma *x, void *b, long m, long a, char *s)
 {
     long dummy;
-    int synclet;
+    long synclet;
     dummy = a + 1;
     synclet = x->syncoutlet;
-    a = (a < x->chans) ? 0 : ((a > x->chans) ? 2 : 1);
+    a = (a < x->ochans) ? 0 : ((a > x->ochans) ? 2 : 1);
     
     if (m == ASSIST_INLET) {
         switch (a)
         {
             case 0:
                 if (dummy == 1) {
-                    if (x->chans == 1)
+                    if (x->ochans == 1)
                         sprintf(s, "(signal) Record Input / messages to karma~");
                     else
                         sprintf(s, "(signal) Record Input 1 / messages to karma~");
@@ -1260,8 +1503,8 @@ void karma_assist(t_karma *x, void *b, long m, long a, char *s)
                 }
                 break;
             case 1:
-                sprintf(s, "(signal) Speed Factor");
-                    // @in 1 @type signal @digest Speed Factor (1. = normal speed, < 1. = slower, > 1. = faster)
+                sprintf(s, "(signal/float) Speed Factor (1. == normal speed)");
+                    // @in 1 @type signal_or_float @digest Speed Factor (1. = normal speed, < 1. = slower, > 1. = faster)
                 break;
             case 2:
                 break;
@@ -1270,7 +1513,7 @@ void karma_assist(t_karma *x, void *b, long m, long a, char *s)
         switch (a)
         {
             case 0:
-                if (x->chans == 1)
+                if (x->ochans == 1)
                     sprintf(s, "(signal) Audio Output");
                 else
                     sprintf(s, "(signal) Audio Output %ld", dummy);
@@ -1279,7 +1522,7 @@ void karma_assist(t_karma *x, void *b, long m, long a, char *s)
             case 1:
                 if (synclet)
                     sprintf(s, "(signal) Sync Outlet (current position 0..1)");
-                    // @out 1 @type signal @digest if chosen (object arg #3) Sync Outlet (current position 0..1)
+                    // @out 1 @type signal @digest if chosen (@syncout 1) Sync Outlet (current position 0..1)
                 else
                     sprintf(s, "List: current position (float 0..1) play state (int 0/1) record state (int 0/1) start position (float ms) end position (float ms) window size (float ms) current state (int 0=stop 1=play 2=record 3=overdub 4=append 5=initial)");
                 break;
@@ -1292,15 +1535,25 @@ void karma_assist(t_karma *x, void *b, long m, long a, char *s)
 }
 
 //  //  //
+
+void karma_float(t_karma *x, double speedfloat)
+{
+    long inlet = proxy_getinlet((t_object *)x);
+    long chans = (long)x->ochans;
+
+    if (inlet == chans) {   // if speed inlet
+        x->speedfloat = speedfloat;
+    }
+}
 /*
 void karma_select_internal(t_karma *x, double selectionstart, double selectionlength)
 {
     t_ptr_int bfrmaesminusone;
     double setloopsize;
 
-    double minsampsnorm = x->vsnorm * 0.5;          // half vectorsize samples minimum as normalised value  // !! buffer sr ??
+    double minsampsnorm = x->bvsnorm * 0.5;         // half vectorsize samples minimum as normalised value  // !! buffer sr !!
     x->selstart = selectionstart;
-    x->selection = (selectionlength < minsampsnorm) ? minsampsnorm : selectionlength;     // !! TODO: check
+    x->selection = (selectionlength < minsampsnorm) ? minsampsnorm : selectionlength;
 
     // for dealing with selection-out-of-bounds logic:
 
@@ -1393,8 +1646,8 @@ void karma_select_size(t_karma *x, double duration) // duration = "window" float
 {
     t_ptr_int bfrmaesminusone, setloopsize;
     
-    double minsampsnorm = x->vsnorm * 0.5;          // half vectorsize samples minimum as normalised value  // !! buffer sr ??
-    x->selection = (duration < minsampsnorm) ? minsampsnorm : duration;     // !! TODO: check
+    double minsampsnorm = x->bvsnorm * 0.5;         // half vectorsize samples minimum as normalised value  // !! buffer sr !!
+    x->selection = (duration < minsampsnorm) ? minsampsnorm : duration;
     
     // for dealing with selection-out-of-bounds logic:
     
@@ -1461,7 +1714,7 @@ void karma_record(t_karma *x)
     long i;
     char sc, sh;
     t_bool record, go, recalt, append, init;
-    t_ptr_int bchans, bframes;
+    t_ptr_int nchans, bframes;
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
 
@@ -1471,14 +1724,14 @@ void karma_record(t_karma *x)
     append = x->append;
     init = x->recordinit;
     sc = x->statecontrol;
-    sh = x->statehuman;     // !! fix: overdub display !! *
+    sh = x->statehuman;
     
     x->stopallowed = 1;
     
     if (record) {
         if (recalt) {
             sc = 2;
-            sh = 3;         // ?? * (this is wrong?, it is not neccessarily overdub)
+            sh = 3;         // ?? is this wrong?, it is not neccessarily overdub ??
         } else {
             sc = 3;
             sh = 2;
@@ -1488,7 +1741,7 @@ void karma_record(t_karma *x)
             if (go) {
                 if (recalt) {
                     sc = 2;
-                    sh = 3; // ?? * (this is wrong?, it is not neccessarily overdub)
+                    sh = 3; // ?? is this wrong?, it is not neccessarily overdub ??
                 } else {
                     sc = 10;    // !! what is #10 (this is the only place it is set) ?!
                     sh = 4;
@@ -1501,20 +1754,20 @@ void karma_record(t_karma *x)
             if (!go) {
                 init = 1;
                 if (buf) {
-                    bchans = x->bchans;
+                    nchans = x->nchans;     // !! address only useable
                     bframes = x->bframes;
                     b = buffer_locksamples(buf);
                     if (!b)
                         goto zero;
                     
                     for (i = 0; i < bframes; i++) {
-                        if (bchans > 1) {
-                            b[i * bchans] = 0.0;
-                            b[(i * bchans) + 1] = 0.0;
-                            if (bchans > 2) {
-                                b[(i * bchans) + 2] = 0.0;
-                                if (bchans > 3) {
-                                    b[(i * bchans) + 3] = 0.0;
+                        if (nchans > 1) {
+                            b[i * nchans] = 0.0;
+                            b[(i * nchans) + 1] = 0.0;
+                            if (nchans > 2) {
+                                b[(i * nchans) + 2] = 0.0;
+                                if (nchans > 3) {
+                                    b[(i * nchans) + 3] = 0.0;
                                 }
                             }
                         } else {
@@ -1678,6 +1931,23 @@ void karma_jump(t_karma *x, double jumpposition)
         }
     }
 }
+
+//  //  //
+
+t_max_err karma_syncout_set(t_karma *x, t_object *attr, long argc, t_atom *argv)
+{
+    long syncout = atom_getlong(argv);
+
+    if (!x->initskip) {
+        if (argc && argv) {
+            x->syncoutlet   = CLAMP(syncout, 0, 1);
+        }
+    } else {
+        object_warn((t_object *) x, "the syncout attribute is only available at instantiation time, ignoring 'syncout %ld'", syncout);
+    }
+
+    return 0;
+}
 /*
 t_max_err karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat)
 {
@@ -1687,39 +1957,41 @@ t_max_err karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, v
     return buffer_ref_notify(x->buf, s, msg, sndr, dat);
 }
 */
-// OR ??
 t_max_err karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat)
 {
     t_symbol *bufnamecheck = (t_symbol *)object_method((t_object *)sndr, gensym("getname"));
  
-    if (bufnamecheck == x->bufname) {   // check if calling object was the buffer...
+    if (bufnamecheck == x->bufname) {   // check...
         if (msg == ps_buffer_modified)
             x->buf_modified = true;     // set flag
-        return  buffer_ref_notify(x->buf, s, msg, sndr, dat);   // ...return with the calling buffer
-    } else {                            // if calling object was none of the expected buffers...
-        return  MAX_ERR_NONE;                                   // ...return generic MAX_ERR_NONE
+        return  buffer_ref_notify(x->buf, s, msg, sndr, dat);   // ...return
+    } else {
+        return  MAX_ERR_NONE;
     }
 }
 
 void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long vecount, long flags)
 {
-    x->sr       = srate;
+    x->ssr      = srate;
     x->vs       = (double)vecount;
-    x->vsnorm   = (double)vecount / srate;      // x->vs / x->sr;
+    x->vsnorm   = (double)vecount / srate;      // x->vs / x->ssr;
     x->clockgo  = 1;
     
     if (x->bufname != 0) {
         if (!x->initinit)
-            karma_buf_setup(x, x->bufname);     // !! this should be defered ??
-        if (x->chans > 1) {
-            if (x->chans > 2) {
+            karma_buf_setup(x, x->bufname);     // does 'x->bvsnorm'    // !! this should be defered ??
+        if (x->ochans > 1) {
+            if (x->ochans > 2) {
+                x->speedconnect = count[4];     // speed is 5th inlet
                 object_method(dsp64, gensym("dsp_add64"), x, karma_quad_perform, 0, NULL);
                 //post("karma~_64bit_v1.5_quad");
             } else {
+                x->speedconnect = count[2];     // speed is 3rd inlet
                 object_method(dsp64, gensym("dsp_add64"), x, karma_stereo_perform, 0, NULL);
                 //post("karma~_64bit_v1.5_stereo");
             }
         } else {
+            x->speedconnect = count[1];         // speed is 2nd inlet
             object_method(dsp64, gensym("dsp_add64"), x, karma_mono_perform, 0, NULL);
             //post("karma~_64bit_v1.5_mono");
         }
@@ -1738,7 +2010,7 @@ void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long v
 
 
 //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //
-//  //  //  //  //  //  //  //  //  //  PERFORM ROUTINES    //  //  //  //  //  //  //  //  //
+//  //  //  //  //  //  //  //  (crazy) PERFORM ROUTINES    //  //  //  //  //  //  //  //  //
 //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //  //
 
 
@@ -1746,22 +2018,23 @@ void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long v
 
 void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr)
 {
-    long syncoutlet = x->syncoutlet;
+    long    syncoutlet  = x->syncoutlet;
 
     double *in1 = ins[0];   // mono in
-    double *in2 = ins[1];                       // speed
+    double *in2 = ins[1];                       // speed (if signal connected)
     
     double *out1  = outs[0];// mono out
-    double *outPh = syncoutlet ? outs[1] : 0;   // sync (if arg #3 is on)
+    double *outPh = syncoutlet ? outs[1] : 0;   // sync (if @syncout 1)
 
-    int n = vcount;         // !!
+    int     n = vcount;
+    int     speedinlet  = x->speedconnect;
     
     double accuratehead, maxhead, jumphead, srscale, speedsrscaled, recplaydif, pokesteps;
-    double speed, osamp1, overdubamp, overdubprev, ovdbdif, selstart, selection;
+    double speed, speedfloat, osamp1, overdubamp, overdubprev, ovdbdif, selstart, selection;
     double o1prev, o1dif, frac, snrfade, globalramp, snrramp, writeval1, coeff1, recin1;
     t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
-    char direction, directionprev, directionorig, statecontrol, /*statehuman,*/ playfadeflag, recfadeflag, recendmark;
-    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, nchan, snrtype, interp;
+    char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
+    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, pchans, snrtype, interp;
     t_ptr_int frames, startloop, endloop, playhead, recordhead, minloop, maxloop, setloopsize;
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
@@ -1770,12 +2043,12 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     record          = x->record;
     recordprev      = x->recordprev;
     dirt            = 0;
-    if (!b || x->ob.z_disabled)
+    if (!b || x->k_ob.z_disabled)
         goto zero;
     if (record || recordprev)
         dirt        = 1;
     if (x->buf_modified) {
-        karma_buf_modset(x, buf);
+        karma_buf_modify(x, buf);
         x->buf_modified  = false;
     }
     
@@ -1785,12 +2058,11 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
 
     go              = x->go;
     statecontrol    = x->statecontrol;
-    //statehuman    = x->statehuman;
     playfadeflag    = x->playfadeflag;
     recfadeflag     = x->recfadeflag;
     recordhead      = x->recordhead;
     recordalt       = x->recordalt;
-    nchan           = x->bchans;
+    pchans          = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
     triginit        = x->triginit;
@@ -1822,15 +2094,15 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     snrramp         = (double)x->snrramp;
     snrtype         = x->snrtype;
     interp          = x->interpflag;
+    speedfloat      = x->speedfloat;
     
-    switch (statecontrol)   // all-in-one 'switch' statement to catch and handle all(most) messages - raja
+    switch (statecontrol)   // "all-in-one 'switch' statement to catch and handle all(most) messages" - raja
     {
         case 0:             // case 0: zero
             break;
         case 1:             // case 1: record init
             record = go = triginit = looprecord = 1;
             recordfade = recfadeflag = playfade = playfadeflag = statecontrol = 0;
-            //statehuman = 5;
             break;
         case 2:             // case 2: record recordalt (wtf is 'recordalt' ('rectoo') ?!)
             recendmark = 3;
@@ -1861,10 +2133,8 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 recordfade = 0;
                 recfadeflag = 1;
             }
-            else {          // !!!!!!!!!! ELSE ?!?!?!?!?!   // otherwise playback is silent after 'append' ??...
-                playfade = 0;
-                playfadeflag = 1;
-            }               // !! .../
+            playfade = 0;
+            playfadeflag = 1;
             statecontrol = 0;
             break;
         case 8:             // case 8: jump
@@ -1877,16 +2147,14 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             statecontrol = 0;
             break;
         case 9:             // case 9: append
-            playfadeflag = 4;
-            playfade = 0;
+            playfadeflag = 4;   // !!
+            playfade = 0;       // !!
             statecontrol = 0;
-            //statehuman = 4;
             break;
-        case 10:            // case 10: special case append
+        case 10:            // case 10: special case append (what is special about it ?!)
             record = looprecord = recordalt = 1;
             snrfade = 0.0;
             recordfade = recfadeflag = statecontrol = 0;
-            //statehuman = 4;
             break;
         case 11:            // case 11: record on reg (wtf is 'reg' ?!)
             playfadeflag = 3;
@@ -1895,20 +2163,20 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             break;          // !!
     }
 
-    // raja notes:
+    //  raja notes:
     // 'snrfade = 0.0' triggers switch&ramp (declick play)
     // 'recordhead = -1' triggers ipoke-interp cuts and accompanies buf~ fades (declick record)
 
     while (n--)
     {
         recin1 = *in1++;
-        speed = *in2++;
+        speed = speedinlet ? *in2++ : speedfloat;   // signal of float ?
         direction = (speed > 0) ? 1 : ((speed < 0) ? -1 : 0);
 
         // declick for change of 'dir'ection
         if (directionprev != direction) {
             if (record && globalramp) {
-                ease_bufoff(frames - 1, b, nchan, recordhead, -direction, globalramp);
+                ease_bufoff(frames - 1, b, pchans, recordhead, -direction, globalramp);
                 recordfade = recfadeflag = 0;
                 recordhead = -1;
             }
@@ -1917,7 +2185,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
         
         if ((record - recordprev) < 0) {           // samp @record-off
             if (globalramp)
-                ease_bufoff(frames - 1, b, nchan, recordhead, direction, globalramp);
+                ease_bufoff(frames - 1, b, pchans, recordhead, direction, globalramp);
             recordhead = -1;
             dirt = 1;
         } else if ((record - recordprev) > 0) {    // samp @record-on
@@ -1925,7 +2193,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             if (speed < 1.0)
                 snrfade = 0.0;
             if (globalramp)
-                ease_bufoff(frames - 1, b, nchan, accuratehead, -direction, globalramp);
+                ease_bufoff(frames - 1, b, pchans, accuratehead, -direction, globalramp);
         }
         recordprev = record;
         
@@ -1933,6 +2201,10 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
         {
             if (go)
             {
+                /*
+                calculate_head(directionorig, maxhead, frames, minloop, selstart, selection, direction, globalramp, &b, pchans, record, jumpflag, jumphead, &maxloop, &setloopsize, &accuratehead, &startloop, &endloop, &wrapflag, &recordhead, &snrfade, &append, &recordalt, &recendmark, &triginit, &speedsrscaled, &recordfade, &recfadeflag);
+                */
+                
                 if (triginit)
                 {
                     if (recendmark)  // calculate end of loop
@@ -1951,7 +2223,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             }
                             if (direction < 0) {
                                 if (globalramp)
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                             }
                         } else {
                             maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
@@ -1967,11 +2239,11 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             accuratehead = endloop;
                             if (direction > 0) {
                                 if (globalramp)
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                             }
                         }
                         if (globalramp)
-                            ease_bufoff(frames - 1, b, nchan, maxhead, -direction, globalramp);
+                            ease_bufoff(frames - 1, b, pchans, maxhead, -direction, globalramp);
                         recordhead = -1;
                         snrfade = 0.0;
                         triginit = 0;
@@ -1984,7 +2256,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             accuratehead = (direction < 0) ? endloop : startloop;
                         if (record) {
                             if (globalramp) {
-                                ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 recordfade = 0;
                             }
                             recordhead = -1;
@@ -2018,7 +2290,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 snrfade = 0.0;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                         recordfade = 0;
                                     }
                                     recfadeflag = 0;
@@ -2029,7 +2301,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 snrfade = 0.0;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                         recordfade = 0;
                                     }
                                     recfadeflag = 0;
@@ -2043,7 +2315,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 snrfade = 0.0;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                         recordfade = 0;
                                     }
                                     recfadeflag = 0;
@@ -2054,7 +2326,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 snrfade = 0.0;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                         recordfade = 0;
                                     }
                                     recfadeflag = 0;
@@ -2071,7 +2343,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 snrfade = 0.0;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                         recordfade = 0;
                                     }
                                     recfadeflag = 0;
@@ -2084,7 +2356,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufoff(frames - 1, b, nchan, maxloop, -direction, globalramp);
+                                            ease_bufoff(frames - 1, b, pchans, maxloop, -direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -2097,7 +2369,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
+                                            ease_bufoff(frames - 1, b, pchans, minloop, -direction, globalramp);     // 0.0  // ??
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -2112,7 +2384,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     if (record)
                                     {
                                         if (globalramp) {
-                                            ease_bufoff(frames - 1, b, nchan, ((frames - 1) - maxloop), -direction, globalramp);
+                                            ease_bufoff(frames - 1, b, pchans, ((frames - 1) - maxloop), -direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -2123,7 +2395,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                            ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -2138,7 +2410,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 snrfade = 0.0;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                         recordfade = 0;
                                     }
                                     recfadeflag = 0;
@@ -2149,6 +2421,8 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                     }
                 }
 
+                /* calculate_head() to here */
+                
                 // interp ratio
                 playhead = trunc(accuratehead);
                 if (direction > 0) {
@@ -2161,14 +2435,14 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);  // samp-indices for interp
                 
                 if (record) {           // if recording do linear-interp else...
-                    osamp1 =    LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
+                    osamp1 =    LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
                 } else {                // ...cubic / spline if interpflag > 0 (default cubic)
                     if (interp == 1)
-                        osamp1  = CUBIC_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
+                        osamp1  = CUBIC_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
                     else if (interp == 2)
-                        osamp1  = SPLINE_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
+                        osamp1  = SPLINE_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
                     else
-                        osamp1  = LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
+                        osamp1  = LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
                 }
                 
                 if (globalramp)
@@ -2178,7 +2452,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         if (snrfade == 0.0) {
                             o1dif = o1prev - osamp1;
                         }
-                        osamp1 += ease_switchramp(o1dif, snrfade, snrtype);// <- easing-curv options (implemented by raja)
+                        osamp1 += ease_switchramp(o1dif, snrfade, snrtype);// <- easing-curv options implemented by raja
                         snrfade += 1 / snrramp;
                     }                                               // "Switch and Ramp" end
                     
@@ -2205,7 +2479,8 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 case 4:                             // append
                                     go = triginit = looprecord = 1;
                                     snrfade = 0.0;
-                                    playfade = playfadeflag = 0;
+                                    playfade = 0;   // !! !! originally zero, but then playback goes silent before empty portion of buffer !! !!
+                                    playfadeflag = 0;
                                     break;
                             }
                         }
@@ -2228,7 +2503,8 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         case 4:                                     // append
                             go = triginit = looprecord = 1;
                             snrfade = 0.0;
-                            playfade = playfadeflag = 0;
+                            playfade = 0;   // !! !! originally zero, but then playback goes silent before empty portion of buffer !! !!
+                            playfadeflag = 0;
                             break;
                     }
                 }
@@ -2248,16 +2524,16 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
              ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
              (modded to allow for 'window' and 'position' to change on the fly)
              raja's razor: simplest answer to everything was:
-             recin1 = ease_record(recin1 + (b[playhead * nchan] * overdubamp), recfadeflag, globalramp, recordfade); ...
+             recin1 = ease_record(recin1 + (b[playhead * pchans] * overdubamp), recfadeflag, globalramp, recordfade); ...
              ... placed at the beginning / input of ipoke~ code to apply appropriate ramps to oldbuf + newinput (everything all-at-once) ...
              ... allows ipoke~ code to work its sample-specific math / magic accurately through the ducking / ramps even at high speed
             */
             if (record)
             {
                 if ((recordfade < globalramp) && (globalramp > 0.0))
-                    recin1 = ease_record(recin1 + (((double)b[playhead * nchan]) * overdubamp), recfadeflag, globalramp, recordfade);
+                    recin1 = ease_record(recin1 + (((double)b[playhead * pchans]) * overdubamp), recfadeflag, globalramp, recordfade);
                 else
-                    recin1 += ((double)b[playhead * nchan]) * overdubamp;
+                    recin1 += ((double)b[playhead * pchans]) * overdubamp;
                 
                 if (recordhead < 0) {
                     recordhead = playhead;
@@ -2273,19 +2549,19 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         writeval1 = writeval1 / pokesteps;
                         pokesteps = 1.0;
                     }
-                    b[recordhead * nchan] = writeval1;
+                    b[recordhead * pchans] = writeval1;
                     recplaydif = (double)(playhead - recordhead);
                     if (recplaydif > 0) {               // linear-interpolation for speed > 1x
                         coeff1 = (recin1 - writeval1) / recplaydif;
                         for (i = recordhead + 1; i < playhead; i++) {
                             writeval1 += coeff1;
-                            b[i * nchan] = writeval1;
+                            b[i * pchans] = writeval1;
                         }
                     } else {
                         coeff1 = (recin1 - writeval1) / recplaydif;
                         for (i = recordhead - 1; i > playhead; i--) {
                             writeval1 -= coeff1;
-                            b[i * nchan] = writeval1;
+                            b[i * pchans] = writeval1;
                         }
                     }
                     writeval1 = recin1;
@@ -2344,7 +2620,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         snrfade = 0.0;
                         if (record) {
                             if (globalramp) {
-                                ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 recordfade = 0;
                             }
                             recfadeflag = 0;
@@ -2358,7 +2634,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         {
                             accuratehead = maxhead;                 // !! maxhead !!
                             if (globalramp) {
-                                ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 recordfade = 0;
                             }
                             recordalt = 1;
@@ -2392,7 +2668,7 @@ apned:
                             record = append;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                    ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -2405,7 +2681,7 @@ apned:
                             record = append;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
+                                    ease_bufoff(frames - 1, b, pchans, minloop, -direction, globalramp);     // 0.0  // ??
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -2422,7 +2698,7 @@ apned:
                         {
                             accuratehead = maxhead + accuratehead;
                             if (globalramp) {
-                                ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
+                                ease_bufoff(frames - 1, b, pchans, minloop, -direction, globalramp);     // 0.0  // ??
                                 recordhead = -1;
                                 recfadeflag = recordfade = 0;
                             }
@@ -2432,7 +2708,7 @@ apned:
                         {
                             accuratehead = maxhead + (accuratehead - (frames - 1));
                             if (globalramp) {
-                                ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                 recordhead = -1;
                                 recfadeflag = recordfade = 0;
                             }
@@ -2519,9 +2795,9 @@ apned:
             if (record)
             {
                 if ((recordfade < globalramp) && (globalramp > 0.0))
-                    recin1 = ease_record(recin1 + ((double)b[playhead * nchan]) * overdubamp, recfadeflag, globalramp, recordfade);
+                    recin1 = ease_record(recin1 + ((double)b[playhead * pchans]) * overdubamp, recfadeflag, globalramp, recordfade);
                 else
-                    recin1 += ((double)b[playhead * nchan]) * overdubamp;
+                    recin1 += ((double)b[playhead * pchans]) * overdubamp;
                 
                 if (recordhead < 0) {
                     recordhead = playhead;
@@ -2537,7 +2813,7 @@ apned:
                         writeval1 = writeval1 / pokesteps;
                         pokesteps = 1.0;
                     }
-                    b[recordhead * nchan] = writeval1;
+                    b[recordhead * pchans] = writeval1;
                     recplaydif = (double)(playhead - recordhead);   // linear-interp for speed > 1x
                     if (direction != directionorig)
                     {
@@ -2551,17 +2827,17 @@ apned:
                                     coeff1 = (recin1 - writeval1) / recplaydif;
                                     for (i = (recordhead - 1); i >= 0; i--) {
                                         writeval1 -= coeff1;
-                                        b[i * nchan] = writeval1;
+                                        b[i * pchans] = writeval1;
                                     }
                                     for (i = maxhead; i > playhead; i--) {
                                         writeval1 -= coeff1;
-                                        b[i * nchan] = writeval1;
+                                        b[i * pchans] = writeval1;
                                     }
                                 } else {
                                     coeff1 = (recin1 - writeval1) / recplaydif;
                                     for (i = (recordhead + 1); i < playhead; i++) {
                                         writeval1 += coeff1;
-                                        b[i * nchan] = writeval1;
+                                        b[i * pchans] = writeval1;
                                     }
                                 }
                             } else {
@@ -2571,17 +2847,17 @@ apned:
                                     coeff1 = (recin1 - writeval1) / recplaydif;
                                     for (i = (recordhead + 1); i < (maxhead + 1); i++) {
                                         writeval1 += coeff1;
-                                        b[i * nchan] = writeval1;
+                                        b[i * pchans] = writeval1;
                                     }
                                     for (i = 0; i < playhead; i++) {
                                         writeval1 += coeff1;
-                                        b[i * nchan] = writeval1;
+                                        b[i * pchans] = writeval1;
                                     }
                                 } else {
                                     coeff1 = (recin1 - writeval1) / recplaydif;
                                     for (i = (recordhead - 1); i > playhead; i--) {
                                         writeval1 -= coeff1;
-                                        b[i * nchan] = writeval1;
+                                        b[i * pchans] = writeval1;
                                     }
                                 }
                             }
@@ -2594,17 +2870,17 @@ apned:
                                     coeff1 = (recin1 - writeval1) / recplaydif;
                                     for (i = (recordhead - 1); i >= maxhead; i--) {
                                         writeval1 -= coeff1;
-                                        b[i * nchan] = writeval1;
+                                        b[i * pchans] = writeval1;
                                     }
                                     for (i = (frames - 1); i > playhead; i--) {
                                         writeval1 -= coeff1;
-                                        b[i * nchan] = writeval1;
+                                        b[i * pchans] = writeval1;
                                     }
                                 } else {
                                     coeff1 = (recin1 - writeval1) / recplaydif;
                                     for (i = (recordhead + 1); i < playhead; i++) {
                                         writeval1 += coeff1;
-                                        b[i * nchan] = writeval1;
+                                        b[i * pchans] = writeval1;
                                     }
                                 }
                             } else {
@@ -2614,17 +2890,17 @@ apned:
                                     coeff1 = (recin1 - writeval1) / recplaydif;
                                     for (i = (recordhead + 1); i < frames; i++) {
                                         writeval1 += coeff1;
-                                        b[i * nchan] = writeval1;
+                                        b[i * pchans] = writeval1;
                                     }
                                     for (i = maxhead; i < playhead; i++) {
                                         writeval1 += coeff1;
-                                        b[i * nchan] = writeval1;
+                                        b[i * pchans] = writeval1;
                                     }
                                 } else {
                                     coeff1 = (recin1 - writeval1) / recplaydif;
                                     for (i = (recordhead - 1); i > playhead; i--) {
                                         writeval1 -= coeff1;
-                                        b[i * nchan] = writeval1;
+                                        b[i * pchans] = writeval1;
                                     }
                                 }
                             }
@@ -2635,13 +2911,13 @@ apned:
                             coeff1 = (recin1 - writeval1) / recplaydif;
                             for (i = (recordhead + 1); i < playhead; i++) {
                                 writeval1 += coeff1;
-                                b[i * nchan] = writeval1;
+                                b[i * pchans] = writeval1;
                             }
                         } else {
                             coeff1 = (recin1 - writeval1) / recplaydif;
                             for (i = (recordhead - 1); i > playhead; i--) {
                                 writeval1 -= coeff1;
-                                b[i * nchan] = writeval1;
+                                b[i * pchans] = writeval1;
                             }
                         }
                     }
@@ -2795,24 +3071,25 @@ zero:
 
 void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr)
 {
-    long syncoutlet = x->syncoutlet;
+    long    syncoutlet = x->syncoutlet;
     
     double *in1 = ins[0];       // L
     double *in2 = ins[1];       // R
-    double *in3 = ins[2];                       // speed
+    double *in3 = ins[2];                       // speed (if signal connected)
     
     double *out1  = outs[0];    // L
     double *out2  = outs[1];    // R
-    double *outPh = syncoutlet ? outs[2] : 0;   // sync (if arg #3 is on)
+    double *outPh = syncoutlet ? outs[2] : 0;   // sync (if @syncout 1)
     
-    int n = vcount;
+    int     n = vcount;
+    int     speedinlet  = x->speedconnect;
     
     double accuratehead, maxhead, jumphead, srscale, speedsrscaled, recplaydif, pokesteps;
-    double speed, osamp1, osamp2, overdubamp, overdubprev, ovdbdif, selstart, selection;
+    double speed, speedfloat, osamp1, osamp2, overdubamp, overdubprev, ovdbdif, selstart, selection;
     double o1prev, o2prev, o1dif, o2dif, frac, snrfade, globalramp, snrramp, writeval1, writeval2, coeff1, coeff2, recin1, recin2;
     t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
     char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
-    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, nchan, snrtype, interp;
+    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, pchans, snrtype, interp;
     t_ptr_int frames, startloop, endloop, playhead, recordhead, minloop, maxloop, setloopsize;
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
@@ -2821,12 +3098,12 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     record          = x->record;
     recordprev      = x->recordprev;
     dirt            = 0;
-    if (!b || x->ob.z_disabled)
+    if (!b || x->k_ob.z_disabled)
         goto zero;
     if (record || recordprev)
         dirt        = 1;
     if (x->buf_modified) {
-        karma_buf_modset(x, buf);
+        karma_buf_modify(x, buf);
         x->buf_modified  = false;
     }
     
@@ -2843,7 +3120,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     recfadeflag     = x->recfadeflag;
     recordhead      = x->recordhead;
     recordalt       = x->recordalt;
-    nchan           = x->bchans;
+    pchans          = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
     triginit        = x->triginit;
@@ -2875,8 +3152,9 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     snrramp         = (double)x->snrramp;
     snrtype         = x->snrtype;
     interp          = x->interpflag;
+    speedfloat      = x->speedfloat;
     
-    switch (statecontrol)   // all-in-one 'switch' statement to catch and handle all(most) messages - raja
+    switch (statecontrol)   // "all-in-one 'switch' statement to catch and handle all(most) messages" - raja
     {
         case 0:             // case 0: zero
             break;
@@ -2884,31 +3162,31 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
             record = go = triginit = looprecord = 1;
             recordfade = recfadeflag = playfade = playfadeflag = statecontrol = 0;
             break;
-        case 2:             // case 2: record recordalt
+        case 2:             // case 2: record recordalt (wtf is 'recordalt' ('rectoo') ?!)
             recendmark = 3;
             record = recfadeflag = playfadeflag = 1;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 3:             // case 3: record off reg
+        case 3:             // case 3: record off reg (wtf is 'reg' ?!)
             recfadeflag = 1;
             playfadeflag = 3;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 4:             // case 4: play recordalt
+        case 4:             // case 4: play recordalt (wtf is 'recordalt' ('rectoo') ?!)
             recendmark = 2;
             recfadeflag = playfadeflag = 1;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 5:             // case 5: play on reg
+        case 5:             // case 5: play on reg (wtf is 'reg' ?!)
             triginit = 1;
             statecontrol = 0;
             break;
-        case 6:             // case 6: stop recordalt
+        case 6:             // case 6: stop recordalt (wtf is 'recordalt' ('rectoo') ?!)
             playfade = recordfade = 0;
             recendmark = playfadeflag = recfadeflag = 1;
             statecontrol = 0;
             break;
-        case 7:             // case 7: stop reg
+        case 7:             // case 7: stop reg (wtf is 'reg' ?!)
             if (record) {
                 recordfade = 0;
                 recfadeflag = 1;
@@ -2927,16 +3205,16 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
             statecontrol = 0;
             break;
         case 9:             // case 9: append
-            playfadeflag = 4;
-            playfade = 0;
+            playfadeflag = 4;   // !!
+            playfade = 0;       // !!
             statecontrol = 0;
             break;
-        case 10:            // case 10: special case append
+        case 10:            // case 10: special case append (what is special about it ?!)
             record = looprecord = recordalt = 1;
             snrfade = 0.0;
             recordfade = recfadeflag = statecontrol = 0;
             break;
-        case 11:            // case 11: record on reg
+        case 11:            // case 11: record on reg (wtf is 'reg' ?!)
             playfadeflag = 3;
             recfadeflag = 5;
             recordfade = playfade = statecontrol = 0;
@@ -2947,20 +3225,20 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     // 'snrfade = 0.0' triggers switch&ramp (declick play)
     // 'recordhead = -1' triggers ipoke-interp cuts and accompanies buf~ fades (declick record)
     
-    if (nchan > 1)
+    if (pchans > 1)
     {
 
         while (n--)
         {
             recin1 = *in1++;
             recin2 = *in2++;
-            speed = *in3++;
+            speed = speedinlet ? *in3++ : speedfloat;   // signal of float ?
             direction = (speed > 0) ? 1 : ((speed < 0) ? -1 : 0);
             
             // declick for change of 'dir'ection
             if (directionprev != direction) {
                 if (record && globalramp) {
-                    ease_bufoff(frames - 1, b, nchan, recordhead, -direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, recordhead, -direction, globalramp);
                     recordfade = recfadeflag = 0;
                     recordhead = -1;
                 }
@@ -2969,7 +3247,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
             
             if ((record - recordprev) < 0) {           // samp @record-off
                 if (globalramp)
-                    ease_bufoff(frames - 1, b, nchan, recordhead, direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, recordhead, direction, globalramp);
                 recordhead = -1;
                 dirt = 1;
             } else if ((record - recordprev) > 0) {    // samp @record-on
@@ -2977,7 +3255,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                 if (speed < 1.0)
                     snrfade = 0.0;
                 if (globalramp)
-                    ease_bufoff(frames - 1, b, nchan, accuratehead, -direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, accuratehead, -direction, globalramp);
             }
             recordprev = record;
             
@@ -3003,7 +3281,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 }
                                 if (direction < 0) {
                                     if (globalramp)
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
@@ -3019,11 +3297,11 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 accuratehead = endloop;
                                 if (direction > 0) {
                                     if (globalramp)
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 }
                             }
                             if (globalramp)
-                                ease_bufoff(frames - 1, b, nchan, maxhead, -direction, globalramp);
+                                ease_bufoff(frames - 1, b, pchans, maxhead, -direction, globalramp);
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
@@ -3036,7 +3314,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recordhead = -1;
@@ -3070,7 +3348,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -3081,7 +3359,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -3095,7 +3373,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -3106,7 +3384,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -3123,7 +3401,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -3136,7 +3414,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, maxloop, -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, maxloop, -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -3149,7 +3427,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
+                                                ease_bufoff(frames - 1, b, pchans, minloop, -direction, globalramp);     // 0.0  // ??
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -3164,7 +3442,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         if (record)
                                         {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, ((frames - 1) - maxloop), -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, ((frames - 1) - maxloop), -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -3175,7 +3453,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -3190,7 +3468,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -3209,22 +3487,22 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                         frac = 1.0 - (accuratehead - playhead);
                     } else {
                         frac = 0.0;
-                    }
+                    }                                                                                   // setloopsize  // ??
                     interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);  // samp-indices for interp
                     
                     if (record) {              // if recording do linear-interp else...
-                        osamp1 =    LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
-                        osamp2 =    LINEAR_INTERP(frac, b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1]);
+                        osamp1 =    LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
+                        osamp2 =    LINEAR_INTERP(frac, b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1]);
                     } else {                // ...cubic / spline if interpflag > 0 (default cubic)
                         if (interp == 1) {
-                            osamp1  = CUBIC_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
-                            osamp2  = CUBIC_INTERP(frac, b[(interp0 * nchan) + 1], b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1], b[(interp3 * nchan) + 1]);
+                            osamp1  = CUBIC_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
+                            osamp2  = CUBIC_INTERP(frac, b[(interp0 * pchans) + 1], b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1], b[(interp3 * pchans) + 1]);
                         } else if (interp == 2) {
-                            osamp1  = SPLINE_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
-                            osamp2  = SPLINE_INTERP(frac, b[(interp0 * nchan) + 1], b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1], b[(interp3 * nchan) + 1]);
+                            osamp1  = SPLINE_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
+                            osamp2  = SPLINE_INTERP(frac, b[(interp0 * pchans) + 1], b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1], b[(interp3 * pchans) + 1]);
                         } else {
-                            osamp1  = LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
-                            osamp2  = LINEAR_INTERP(frac, b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1]);
+                            osamp1  = LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
+                            osamp2  = LINEAR_INTERP(frac, b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1]);
                         }
                     }
                     
@@ -3311,18 +3589,18 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                  ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
                  (modded to allow for 'window' and 'position' to change on the fly)
                  raja's razor: simplest answer to everything was:
-                 recin1 = ease_record(recin1 + (b[playhead * nchan] * overdubamp), recfadeflag, globalramp, recordfade); ...
+                 recin1 = ease_record(recin1 + (b[playhead * pchans] * overdubamp), recfadeflag, globalramp, recordfade); ...
                  ... placed at the beginning / input of ipoke~ code to apply appropriate ramps to oldbuf + newinput (everything all-at-once) ...
                  ... allows ipoke~ code to work its sample-specific math / magic accurately through the ducking / ramps even at high speed
                  */
                 if (record)
                 {
                     if ((recordfade < globalramp) && (globalramp > 0.0)) {
-                        recin1 = ease_record(recin1 + (((double)b[playhead * nchan]) * overdubamp), recfadeflag, globalramp, recordfade);
-                        recin2 = ease_record(recin2 + (((double)b[(playhead * nchan) + 1]) * overdubamp), recfadeflag, globalramp, recordfade);
+                        recin1 = ease_record(recin1 + (((double)b[playhead * pchans]) * overdubamp), recfadeflag, globalramp, recordfade);
+                        recin2 = ease_record(recin2 + (((double)b[(playhead * pchans) + 1]) * overdubamp), recfadeflag, globalramp, recordfade);
                     } else {
-                        recin1 += ((double)b[playhead * nchan]) * overdubamp;
-                        recin2 += ((double)b[(playhead * nchan) + 1]) * overdubamp;
+                        recin1 += ((double)b[playhead * pchans]) * overdubamp;
+                        recin2 += ((double)b[(playhead * pchans) + 1]) * overdubamp;
                     }
                     if (recordhead < 0) {
                         recordhead = playhead;
@@ -3340,8 +3618,8 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             writeval2 = writeval2 / pokesteps;
                             pokesteps = 1.0;
                         }
-                        b[recordhead * nchan] = writeval1;
-                        b[(recordhead * nchan) + 1] = writeval2;
+                        b[recordhead * pchans] = writeval1;
+                        b[(recordhead * pchans) + 1] = writeval2;
                         recplaydif = (double)(playhead - recordhead);
                         if (recplaydif > 0) {                     // linear-interpolation for speed > 1x
                             coeff1 = (recin1 - writeval1) / recplaydif;
@@ -3349,8 +3627,8 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             for (i = recordhead + 1; i < playhead; i++) {
                                 writeval1 += coeff1;
                                 writeval2 += coeff2;
-                                b[i * nchan] = writeval1;
-                                b[(i * nchan) + 1] = writeval2;
+                                b[i * pchans] = writeval1;
+                                b[(i * pchans) + 1] = writeval2;
                             }
                         } else {
                             coeff1 = (recin1 - writeval1) / recplaydif;
@@ -3358,8 +3636,8 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             for (i = recordhead - 1; i > playhead; i--) {
                                 writeval1 -= coeff1;
                                 writeval2 -= coeff2;
-                                b[i * nchan] = writeval1;
-                                b[(i * nchan) + 1] = writeval2;
+                                b[i * pchans] = writeval1;
+                                b[(i * pchans) + 1] = writeval2;
                             }
                         }
                         writeval1 = recin1;
@@ -3400,6 +3678,9 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                     }
                 }
                 directionprev = direction;
+                
+                // !! 'looprecord'
+                
             } else {                                        // initial loop creation
                 if (go)
                 {
@@ -3416,7 +3697,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             snrfade = 0.0;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recfadeflag = 0;
@@ -3430,7 +3711,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             {
                                 accuratehead = maxhead;
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recordalt = 1;
@@ -3462,7 +3743,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 record = append;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                        ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                         recordhead = -1;
                                         recfadeflag = recordfade = 0;
                                     }
@@ -3475,7 +3756,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 record = append;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufoff(frames - 1, b, nchan, 0.0, -direction, globalramp);
+                                        ease_bufoff(frames - 1, b, pchans, 0.0, -direction, globalramp);
                                         recordhead = -1;
                                         recfadeflag = recordfade = 0;
                                     }
@@ -3492,7 +3773,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             {
                                 accuratehead = maxhead + accuratehead;
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, 0.0, -direction, globalramp);
+                                    ease_bufoff(frames - 1, b, pchans, 0.0, -direction, globalramp);
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -3502,7 +3783,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             {
                                 accuratehead = maxhead + (accuratehead - (frames - 1));
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                    ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -3592,11 +3873,11 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                 if (record)
                 {
                     if ((recordfade < globalramp) && (globalramp > 0.0)) {
-                        recin1 = ease_record(recin1 + ((double)b[playhead * nchan]) * overdubamp, recfadeflag, globalramp, recordfade);
-                        recin2 = ease_record(recin2 + ((double)b[(playhead * nchan) + 1]) * overdubamp, recfadeflag, globalramp, recordfade);
+                        recin1 = ease_record(recin1 + ((double)b[playhead * pchans]) * overdubamp, recfadeflag, globalramp, recordfade);
+                        recin2 = ease_record(recin2 + ((double)b[(playhead * pchans) + 1]) * overdubamp, recfadeflag, globalramp, recordfade);
                     } else {
-                        recin1 += ((double)b[playhead * nchan]) * overdubamp;
-                        recin2 += ((double)b[(playhead * nchan) + 1]) * overdubamp;
+                        recin1 += ((double)b[playhead * pchans]) * overdubamp;
+                        recin2 += ((double)b[(playhead * pchans) + 1]) * overdubamp;
                     }
                     if (recordhead < 0) {
                         recordhead = playhead;
@@ -3614,8 +3895,8 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             writeval2 = writeval2 / pokesteps;
                             pokesteps = 1.0;
                         }
-                        b[recordhead * nchan] = writeval1;
-                        b[(recordhead * nchan) + 1] = writeval2;
+                        b[recordhead * pchans] = writeval1;
+                        b[(recordhead * pchans) + 1] = writeval2;
                         recplaydif = (double)(playhead - recordhead);        // linear-interp for speed > 1x
                         if (direction != directionorig)
                         {
@@ -3631,14 +3912,14 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         for (i = (recordhead - 1); i >= 0; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                         for (i = maxhead; i > playhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -3646,8 +3927,8 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         for (i = (recordhead + 1); i < playhead; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     }
                                 } else {
@@ -3659,14 +3940,14 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         for (i = (recordhead + 1); i < (maxhead + 1); i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                         for (i = 0; i < playhead; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -3674,8 +3955,8 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         for (i = (recordhead - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     }
                                 }
@@ -3690,14 +3971,14 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         for (i = (recordhead - 1); i >= maxhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                         for (i = (frames - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -3705,8 +3986,8 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         for (i = (recordhead + 1); i < playhead; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     }
                                 } else {
@@ -3718,14 +3999,14 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         for (i = (recordhead + 1); i < frames; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                         for (i = maxhead; i < playhead; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -3733,8 +4014,8 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         for (i = (recordhead - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     }
                                 }
@@ -3747,8 +4028,8 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 for (i = (recordhead + 1); i < playhead; i++) {
                                     writeval1 += coeff1;
                                     writeval2 += coeff2;
-                                    b[i * nchan] = writeval1;
-                                    b[(i * nchan) + 1] = writeval2;
+                                    b[i * pchans] = writeval1;
+                                    b[(i * pchans) + 1] = writeval2;
                                 }
                             } else {
                                 coeff1 = (recin1 - writeval1) / recplaydif;
@@ -3756,8 +4037,8 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 for (i = (recordhead - 1); i > playhead; i--) {
                                     writeval1 -= coeff1;
                                     writeval2 -= coeff2;
-                                    b[i * nchan] = writeval1;
-                                    b[(i * nchan) + 1] = writeval2;
+                                    b[i * pchans] = writeval1;
+                                    b[(i * pchans) + 1] = writeval2;
                                 }
                             }
                         }
@@ -3858,13 +4139,13 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
         {
             recin1 = *in1++;
             recin2 = *in2++;
-            speed = *in3++;
+            speed = speedinlet ? *in3++ : speedfloat;   // signal of float ?
             direction = (speed > 0) ? 1 : ((speed < 0) ? -1 : 0);
             
             // declick for change of 'dir'ection
             if (directionprev != direction) {
                 if (record && globalramp) {
-                    ease_bufoff(frames - 1, b, nchan, recordhead, -direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, recordhead, -direction, globalramp);
                     recordfade = recfadeflag = 0;
                     recordhead = -1;
                 }
@@ -3873,7 +4154,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
             
             if ((record - recordprev) < 0) {           // samp @record-off
                 if (globalramp)
-                    ease_bufoff(frames - 1, b, nchan, recordhead, direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, recordhead, direction, globalramp);
                 recordhead = -1;
                 dirt = 1;
             } else if ((record - recordprev) > 0) {    // samp @record-on
@@ -3881,7 +4162,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                 if (speed < 1.0)
                     snrfade = 0.0;
                 if (globalramp)
-                    ease_bufoff(frames - 1, b, nchan, accuratehead, -direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, accuratehead, -direction, globalramp);
             }
             recordprev = record;
             
@@ -3907,7 +4188,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 }
                                 if (direction < 0) {
                                     if (globalramp)
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
@@ -3923,11 +4204,11 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 accuratehead = endloop;
                                 if (direction > 0) {
                                     if (globalramp)
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 }
                             }
                             if (globalramp)
-                                ease_bufoff(frames - 1, b, nchan, maxhead, -direction, globalramp);
+                                ease_bufoff(frames - 1, b, pchans, maxhead, -direction, globalramp);
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
@@ -3940,7 +4221,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recordhead = -1;
@@ -3974,7 +4255,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -3985,7 +4266,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -3999,7 +4280,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -4010,7 +4291,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -4027,7 +4308,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -4040,7 +4321,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, maxloop, -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, maxloop, -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -4053,7 +4334,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
+                                                ease_bufoff(frames - 1, b, pchans, minloop, -direction, globalramp);     // 0.0  // ??
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -4068,7 +4349,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         if (record)
                                         {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, ((frames - 1) - maxloop), -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, ((frames - 1) - maxloop), -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -4079,7 +4360,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -4094,7 +4375,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -4113,18 +4394,18 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                         frac = 1.0 - (accuratehead - playhead);
                     } else {
                         frac = 0.0;
-                    }
-                    interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);     // find samp-indices 4 interp
+                    }                                                                                   // setloopsize  // ??
+                    interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);  // samp-indices for interp
                     
                     if (record) {              // if recording do linear-interp else...
-                        osamp1 =    LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
+                        osamp1 =    LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
                     } else {                // ...cubic / spline if interpflag > 0 (default cubic)
                         if (interp == 1)
-                            osamp1  = CUBIC_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
+                            osamp1  = CUBIC_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
                         else if (interp == 2)
-                            osamp1  = SPLINE_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
+                            osamp1  = SPLINE_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
                         else
-                            osamp1  = LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
+                            osamp1  = LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
                     }
                     
                     if (globalramp)
@@ -4206,16 +4487,16 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                  ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
                  (modded to allow for 'window' and 'position' to change on the fly)
                  raja's razor: simplest answer to everything was:
-                 recin1 = ease_record(recin1 + (b[playhead * nchan] * overdubamp), recfadeflag, globalramp, recordfade); ...
+                 recin1 = ease_record(recin1 + (b[playhead * pchans] * overdubamp), recfadeflag, globalramp, recordfade); ...
                  ... placed at the beginning / input of ipoke~ code to apply appropriate ramps to oldbuf + newinput (everything all-at-once) ...
                  ... allows ipoke~ code to work its sample-specific math / magic accurately through the ducking / ramps even at high speed
                  */
                 if (record)
                 {
                     if ((recordfade < globalramp) && (globalramp > 0.0))
-                        recin1 = ease_record(recin1 + (((double)b[playhead * nchan]) * overdubamp), recfadeflag, globalramp, recordfade);
+                        recin1 = ease_record(recin1 + (((double)b[playhead * pchans]) * overdubamp), recfadeflag, globalramp, recordfade);
                     else
-                        recin1 += ((double)b[playhead * nchan]) * overdubamp;
+                        recin1 += ((double)b[playhead * pchans]) * overdubamp;
                     
                     if (recordhead < 0) {
                         recordhead = playhead;
@@ -4231,19 +4512,19 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             writeval1 = writeval1 / pokesteps;
                             pokesteps = 1.0;
                         }
-                        b[recordhead * nchan] = writeval1;
+                        b[recordhead * pchans] = writeval1;
                         recplaydif = (double)(playhead - recordhead);
                         if (recplaydif > 0) {                     // linear-interpolation for speed > 1x
                             coeff1 = (recin1 - writeval1) / recplaydif;
                             for (i = recordhead + 1; i < playhead; i++) {
                                 writeval1 += coeff1;
-                                b[i * nchan] = writeval1;
+                                b[i * pchans] = writeval1;
                             }
                         } else {
                             coeff1 = (recin1 - writeval1) / recplaydif;
                             for (i = recordhead - 1; i > playhead; i--) {
                                 writeval1 -= coeff1;
-                                b[i * nchan] = writeval1;
+                                b[i * pchans] = writeval1;
                             }
                         }
                         writeval1 = recin1;
@@ -4283,6 +4564,9 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                     }
                 }
                 directionprev = direction;
+                
+                // !! 'looprecord'
+                
             } else {                                        // initial loop creation
                 if (go)
                 {
@@ -4299,7 +4583,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             snrfade = 0.0;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recfadeflag = 0;
@@ -4313,7 +4597,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             {
                                 accuratehead = maxhead;
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recordalt = 1;
@@ -4345,7 +4629,7 @@ apnde:
                                 record = append;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                        ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                         recordhead = -1;
                                         recfadeflag = recordfade = 0;
                                     }
@@ -4358,7 +4642,7 @@ apnde:
                                 record = append;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufoff(frames - 1, b, nchan, 0.0, -direction, globalramp);
+                                        ease_bufoff(frames - 1, b, pchans, 0.0, -direction, globalramp);
                                         recordhead = -1;
                                         recfadeflag = recordfade = 0;
                                     }
@@ -4375,7 +4659,7 @@ apnde:
                             {
                                 accuratehead = maxhead + accuratehead;
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, 0.0, -direction, globalramp);
+                                    ease_bufoff(frames - 1, b, pchans, 0.0, -direction, globalramp);
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -4385,7 +4669,7 @@ apnde:
                             {
                                 accuratehead = maxhead + (accuratehead - (frames - 1));
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                    ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -4475,9 +4759,9 @@ apnde:
                 if (record)
                 {
                     if ((recordfade < globalramp) && (globalramp > 0.0))
-                        recin1 = ease_record(recin1 + ((double)b[playhead * nchan]) * overdubamp, recfadeflag, globalramp, recordfade);
+                        recin1 = ease_record(recin1 + ((double)b[playhead * pchans]) * overdubamp, recfadeflag, globalramp, recordfade);
                     else
-                        recin1 += ((double)b[playhead * nchan]) * overdubamp;
+                        recin1 += ((double)b[playhead * pchans]) * overdubamp;
                     
                     if (recordhead < 0) {
                         recordhead = playhead;
@@ -4493,7 +4777,7 @@ apnde:
                             writeval1 = writeval1 / pokesteps;
                             pokesteps = 1.0;
                         }
-                        b[recordhead * nchan] = writeval1;
+                        b[recordhead * pchans] = writeval1;
                         recplaydif = (double)(playhead - recordhead);        // linear-interp for speed > 1x
                         if (direction != directionorig)
                         {
@@ -4507,17 +4791,17 @@ apnde:
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead - 1); i >= 0; i--) {
                                             writeval1 -= coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                         for (i = maxhead; i > playhead; i--) {
                                             writeval1 -= coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead + 1); i < playhead; i++) {
                                             writeval1 += coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     }
                                 } else {
@@ -4527,17 +4811,17 @@ apnde:
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead + 1); i < (maxhead + 1); i++) {
                                             writeval1 += coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                         for (i = 0; i < playhead; i++) {
                                             writeval1 += coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     }
                                 }
@@ -4550,17 +4834,17 @@ apnde:
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead - 1); i >= maxhead; i--) {
                                             writeval1 -= coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                         for (i = (frames - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead + 1); i < playhead; i++) {
                                             writeval1 += coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     }
                                 } else {
@@ -4570,17 +4854,17 @@ apnde:
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead + 1); i < frames; i++) {
                                             writeval1 += coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                         for (i = maxhead; i < playhead; i++) {
                                             writeval1 += coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     }
                                 }
@@ -4591,13 +4875,13 @@ apnde:
                                 coeff1 = (recin1 - writeval1) / recplaydif;
                                 for (i = (recordhead + 1); i < playhead; i++) {
                                     writeval1 += coeff1;
-                                    b[i * nchan] = writeval1;
+                                    b[i * pchans] = writeval1;
                                 }
                             } else {
                                 coeff1 = (recin1 - writeval1) / recplaydif;
                                 for (i = (recordhead - 1); i > playhead; i--) {
                                     writeval1 -= coeff1;
-                                    b[i * nchan] = writeval1;
+                                    b[i * pchans] = writeval1;
                                 }
                             }
                         }
@@ -4756,29 +5040,30 @@ zero:
 
 void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, double **outs, long nouts, long vcount, long flgs, void *usr)
 {
-    long syncoutlet = x->syncoutlet;
+    long    syncoutlet = x->syncoutlet;
     
     double *in1 = ins[0];   // channel 1
     double *in2 = ins[1];   // channel 2
     double *in3 = ins[2];   // channel 3
     double *in4 = ins[3];   // channel 4
-    double *in5 = ins[4];                       // speed
+    double *in5 = ins[4];                       // speed (if signal connected)
     
     double *out1  = outs[0];// channel 1
     double *out2  = outs[1];// channel 2
     double *out3  = outs[2];// channel 3
     double *out4  = outs[3];// channel 4
-    double *outPh = syncoutlet ? outs[4] : 0;   // sync (if arg #3 is on)
+    double *outPh = syncoutlet ? outs[4] : 0;   // sync (if @syncout 1)
     
-    int n = vcount;
+    int     n = vcount;
+    int     speedinlet  = x->speedconnect;
     
     double accuratehead, maxhead, jumphead, srscale, speedsrscaled, recplaydif, pokesteps;
-    double speed, osamp1, osamp2, osamp3, osamp4, overdubamp, overdubprev, ovdbdif, selstart, selection;
+    double speed, speedfloat, osamp1, osamp2, osamp3, osamp4, overdubamp, overdubprev, ovdbdif, selstart, selection;
     double o1prev, o2prev, o1dif, o2dif, o3prev, o4prev, o3dif, o4dif, frac, snrfade, globalramp, snrramp;
     double writeval1, writeval2, writeval3, writeval4, coeff1, coeff2, coeff3, coeff4, recin1, recin2, recin3, recin4;
     t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
     char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
-    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, nchan, snrtype, interp;
+    t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, pchans, snrtype, interp;
     t_ptr_int frames, startloop, endloop, playhead, recordhead, minloop, maxloop, setloopsize;
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
@@ -4787,12 +5072,12 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     record          = x->record;
     recordprev      = x->recordprev;
     dirt            = 0;
-    if (!b || x->ob.z_disabled)
+    if (!b || x->k_ob.z_disabled)
         goto zero;
     if (record || recordprev)
         dirt        = 1;
     if (x->buf_modified) {
-        karma_buf_modset(x, buf);
+        karma_buf_modify(x, buf);
         x->buf_modified  = false;
     }
 
@@ -4815,7 +5100,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     recfadeflag     = x->recfadeflag;
     recordhead      = x->recordhead;
     recordalt       = x->recordalt;
-    nchan           = x->bchans;
+    pchans          = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
     triginit        = x->triginit;
@@ -4847,8 +5132,9 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     snrramp         = (double)x->snrramp;
     snrtype         = x->snrtype;
     interp          = x->interpflag;
+    speedfloat      = x->speedfloat;
     
-    switch (statecontrol)   // all-in-one 'switch' statement to catch and handle all(most) messages - raja
+    switch (statecontrol)   // "all-in-one 'switch' statement to catch and handle all(most) messages" - raja
     {
         case 0:             // case 0: zero
             break;
@@ -4856,31 +5142,31 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             record = go = triginit = looprecord = 1;
             recordfade = recfadeflag = playfade = playfadeflag = statecontrol = 0;
             break;
-        case 2:             // case 2: record recordalt
+        case 2:             // case 2: record recordalt (wtf is 'recordalt' ('rectoo') ?!)
             recendmark = 3;
             record = recfadeflag = playfadeflag = 1;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 3:             // case 3: record off reg
+        case 3:             // case 3: record off reg (wtf is 'reg' ?!)
             recfadeflag = 1;
             playfadeflag = 3;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 4:             // case 4: play recordalt
+        case 4:             // case 4: play recordalt (wtf is 'recordalt' ('rectoo') ?!)
             recendmark = 2;
             recfadeflag = playfadeflag = 1;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 5:             // case 5: play on reg
+        case 5:             // case 5: play on reg (wtf is 'reg' ?!)
             triginit = 1;
             statecontrol = 0;
             break;
-        case 6:             // case 6: stop recordalt
+        case 6:             // case 6: stop recordalt (wtf is 'recordalt' ('rectoo') ?!)
             playfade = recordfade = 0;
             recendmark = playfadeflag = recfadeflag = 1;
             statecontrol = 0;
             break;
-        case 7:             // case 7: stop reg
+        case 7:             // case 7: stop reg (wtf is 'reg' ?!)
             if (record) {
                 recordfade = 0;
                 recfadeflag = 1;
@@ -4899,16 +5185,16 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             statecontrol = 0;
             break;
         case 9:             // case 9: append
-            playfadeflag = 4;
-            playfade = 0;
+            playfadeflag = 4;   // !!
+            playfade = 0;       // !!
             statecontrol = 0;
             break;
-        case 10:            // case 10: special case append
+        case 10:            // case 10: special case append (what is special about it ?!)
             record = looprecord = recordalt = 1;
             snrfade = 0.0;
             recordfade = recfadeflag = statecontrol = 0;
             break;
-        case 11:            // case 11: record on reg
+        case 11:            // case 11: record on reg (wtf is 'reg' ?!)
             playfadeflag = 3;
             recfadeflag = 5;
             recordfade = playfade = statecontrol = 0;
@@ -4919,7 +5205,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     // 'snrfade = 0.0' triggers switch&ramp (declick play)
     // 'recordhead = -1' triggers ipoke-interp cuts and accompanies buf~ fades (declick record)
     
-    if (nchan >= 4)
+    if (pchans >= 4)
     {
 
         while (n--)
@@ -4928,13 +5214,13 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             recin2 = *in2++;
             recin3 = *in3++;
             recin4 = *in4++;
-            speed = *in5++;
+            speed = speedinlet ? *in5++ : speedfloat;   // signal of float ?
             direction = (speed > 0) ? 1 : ((speed < 0) ? -1 : 0);
             
             // declick for change of 'dir'ection
             if (directionprev != direction) {
                 if (record && globalramp) {
-                    ease_bufoff(frames - 1, b, nchan, recordhead, -direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, recordhead, -direction, globalramp);
                     recordfade = recfadeflag = 0;
                     recordhead = -1;
                 }
@@ -4943,7 +5229,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             
             if ((record - recordprev) < 0) {           // samp @record-off
                 if (globalramp)
-                    ease_bufoff(frames - 1, b, nchan, recordhead, direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, recordhead, direction, globalramp);
                 recordhead = -1;
                 dirt = 1;
             } else if ((record - recordprev) > 0) {    // samp @record-on
@@ -4951,7 +5237,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 if (speed < 1.0)
                     snrfade = 0.0;
                 if (globalramp)
-                    ease_bufoff(frames - 1, b, nchan, accuratehead, -direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, accuratehead, -direction, globalramp);
             }
             recordprev = record;
             
@@ -4963,7 +5249,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                     {
                         if (recendmark)  // calculate end of loop
                         {
-                            if (directionorig >= 0)     // forwards
+                            if (directionorig >= 0)
                             {
                                 maxloop = CLAMP(maxhead, 4096, frames - 1);
                                 setloopsize = maxloop - minloop;
@@ -4977,9 +5263,9 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 }
                                 if (direction < 0) {
                                     if (globalramp)
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 }
-                            } else {                    // reverse
+                            } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
                                 setloopsize = maxloop - minloop;    // ((frames - 1) - setloopsize - minloop)   // ??
                                 startloop = ((frames - 1) - setloopsize) + (selstart * setloopsize);    // ((frames - 1) - maxloop) + (selstart * maxloop);   // ??
@@ -4993,16 +5279,16 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 accuratehead = endloop;
                                 if (direction > 0) {
                                     if (globalramp)
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 }
                             }
                             if (globalramp)
-                                ease_bufoff(frames - 1, b, nchan, maxhead, -direction, globalramp);
+                                ease_bufoff(frames - 1, b, pchans, maxhead, -direction, globalramp);
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
                             append = recordalt = recendmark = 0;
-                        } else {                        // jump / play (inside 'window')
+                        } else {    // jump / play (inside 'window')
                             setloopsize = maxloop - minloop;
                             if (jumpflag)
                                 accuratehead = (directionorig >= 0) ? ((jumphead * setloopsize) + minloop) : (((frames - 1) - maxloop) + (jumphead * setloopsize));
@@ -5010,7 +5296,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recordhead = -1;
@@ -5019,7 +5305,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             snrfade = 0.0;
                             triginit = 0;
                         }
-                    } else {                            // jump-based constraints (outside 'window')
+                    } else {        // jump-based constraints (outside 'window')
                         setloopsize = maxloop - minloop;
                         speedsrscaled = speed * srscale;
                         
@@ -5044,7 +5330,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -5055,7 +5341,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -5069,7 +5355,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -5080,7 +5366,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -5088,7 +5374,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     }
                                 }
                             }
-                        } else {                        // regular 'window' / 'position' constraints
+                        } else {    // regular 'window' / 'position' constraints
                             if (wrapflag)
                             {
                                 if ((accuratehead > endloop) && (accuratehead < startloop))
@@ -5097,7 +5383,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -5110,7 +5396,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, maxloop, -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, maxloop, -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -5123,7 +5409,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
+                                                ease_bufoff(frames - 1, b, pchans, minloop, -direction, globalramp);     // 0.0  // ??
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -5138,7 +5424,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         if (record)
                                         {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, ((frames - 1) - maxloop), -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, ((frames - 1) - maxloop), -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -5149,7 +5435,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -5164,7 +5450,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -5183,30 +5469,30 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         frac = 1.0 - (accuratehead - playhead);
                     } else {
                         frac = 0.0;
-                    }
-                    interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);     // find samp-indices 4 interp
+                    }                                                                                   // setloopsize  // ??
+                    interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);  // samp-indices for interp
                     
                     if (record) {              // if recording do linear-interp else...
-                        osamp1 =    LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
-                        osamp2 =    LINEAR_INTERP(frac, b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1]);
-                        osamp3 =    LINEAR_INTERP(frac, b[(interp1 * nchan) + 2], b[(interp2 * nchan) + 2]);
-                        osamp4 =    LINEAR_INTERP(frac, b[(interp1 * nchan) + 3], b[(interp2 * nchan) + 3]);
+                        osamp1 =    LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
+                        osamp2 =    LINEAR_INTERP(frac, b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1]);
+                        osamp3 =    LINEAR_INTERP(frac, b[(interp1 * pchans) + 2], b[(interp2 * pchans) + 2]);
+                        osamp4 =    LINEAR_INTERP(frac, b[(interp1 * pchans) + 3], b[(interp2 * pchans) + 3]);
                     } else {                // ...cubic / spline if interpflag > 0 (default cubic)
                         if (interp == 1) {
-                            osamp1  = CUBIC_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
-                            osamp2  = CUBIC_INTERP(frac, b[(interp0 * nchan) + 1], b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1], b[(interp3 * nchan) + 1]);
-                            osamp3  = CUBIC_INTERP(frac, b[(interp0 * nchan) + 2], b[(interp1 * nchan) + 2], b[(interp2 * nchan) + 2], b[(interp3 * nchan) + 2]);
-                            osamp4  = CUBIC_INTERP(frac, b[(interp0 * nchan) + 3], b[(interp1 * nchan) + 3], b[(interp2 * nchan) + 3], b[(interp3 * nchan) + 3]);
+                            osamp1  = CUBIC_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
+                            osamp2  = CUBIC_INTERP(frac, b[(interp0 * pchans) + 1], b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1], b[(interp3 * pchans) + 1]);
+                            osamp3  = CUBIC_INTERP(frac, b[(interp0 * pchans) + 2], b[(interp1 * pchans) + 2], b[(interp2 * pchans) + 2], b[(interp3 * pchans) + 2]);
+                            osamp4  = CUBIC_INTERP(frac, b[(interp0 * pchans) + 3], b[(interp1 * pchans) + 3], b[(interp2 * pchans) + 3], b[(interp3 * pchans) + 3]);
                         } else if (interp == 2) {
-                            osamp1  = SPLINE_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
-                            osamp2  = SPLINE_INTERP(frac, b[(interp0 * nchan) + 1], b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1], b[(interp3 * nchan) + 1]);
-                            osamp3  = SPLINE_INTERP(frac, b[(interp0 * nchan) + 2], b[(interp1 * nchan) + 2], b[(interp2 * nchan) + 2], b[(interp3 * nchan) + 2]);
-                            osamp4  = SPLINE_INTERP(frac, b[(interp0 * nchan) + 3], b[(interp1 * nchan) + 3], b[(interp2 * nchan) + 3], b[(interp3 * nchan) + 3]);
+                            osamp1  = SPLINE_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
+                            osamp2  = SPLINE_INTERP(frac, b[(interp0 * pchans) + 1], b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1], b[(interp3 * pchans) + 1]);
+                            osamp3  = SPLINE_INTERP(frac, b[(interp0 * pchans) + 2], b[(interp1 * pchans) + 2], b[(interp2 * pchans) + 2], b[(interp3 * pchans) + 2]);
+                            osamp4  = SPLINE_INTERP(frac, b[(interp0 * pchans) + 3], b[(interp1 * pchans) + 3], b[(interp2 * pchans) + 3], b[(interp3 * pchans) + 3]);
                         } else {
-                            osamp1  = LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
-                            osamp2  = LINEAR_INTERP(frac, b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1]);
-                            osamp3  = LINEAR_INTERP(frac, b[(interp1 * nchan) + 2], b[(interp2 * nchan) + 2]);
-                            osamp4  = LINEAR_INTERP(frac, b[(interp1 * nchan) + 3], b[(interp2 * nchan) + 3]);
+                            osamp1  = LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
+                            osamp2  = LINEAR_INTERP(frac, b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1]);
+                            osamp3  = LINEAR_INTERP(frac, b[(interp1 * pchans) + 2], b[(interp2 * pchans) + 2]);
+                            osamp4  = LINEAR_INTERP(frac, b[(interp1 * pchans) + 3], b[(interp2 * pchans) + 3]);
                         }
                     }
                     
@@ -5305,22 +5591,22 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                  ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
                  (modded to allow for 'window' and 'position' to change on the fly)
                  raja's razor: simplest answer to everything was:
-                 recin1 = ease_record(recin1 + (b[playhead * nchan] * overdubamp), recfadeflag, globalramp, recordfade); ...
+                 recin1 = ease_record(recin1 + (b[playhead * pchans] * overdubamp), recfadeflag, globalramp, recordfade); ...
                  ... placed at the beginning / input of ipoke~ code to apply appropriate ramps to oldbuf + newinput (everything all-at-once) ...
                  ... allows ipoke~ code to work its sample-specific math / magic accurately through the ducking / ramps even at high speed
                  */
                 if (record)
                 {
                     if ((recordfade < globalramp) && (globalramp > 0.0)) {
-                        recin1 = ease_record(recin1 + (((double)b[playhead * nchan]) * overdubamp), recfadeflag, globalramp, recordfade);
-                        recin2 = ease_record(recin2 + (((double)b[(playhead * nchan) + 1]) * overdubamp), recfadeflag, globalramp, recordfade);
-                        recin3 = ease_record(recin3 + (((double)b[(playhead * nchan) + 2]) * overdubamp), recfadeflag, globalramp, recordfade);
-                        recin4 = ease_record(recin4 + (((double)b[(playhead * nchan) + 3]) * overdubamp), recfadeflag, globalramp, recordfade);
+                        recin1 = ease_record(recin1 + (((double)b[playhead * pchans]) * overdubamp), recfadeflag, globalramp, recordfade);
+                        recin2 = ease_record(recin2 + (((double)b[(playhead * pchans) + 1]) * overdubamp), recfadeflag, globalramp, recordfade);
+                        recin3 = ease_record(recin3 + (((double)b[(playhead * pchans) + 2]) * overdubamp), recfadeflag, globalramp, recordfade);
+                        recin4 = ease_record(recin4 + (((double)b[(playhead * pchans) + 3]) * overdubamp), recfadeflag, globalramp, recordfade);
                     } else {
-                        recin1 += ((double)b[playhead * nchan]) * overdubamp;
-                        recin2 += ((double)b[(playhead * nchan) + 1]) * overdubamp;
-                        recin3 += ((double)b[(playhead * nchan) + 2]) * overdubamp;
-                        recin4 += ((double)b[(playhead * nchan) + 3]) * overdubamp;
+                        recin1 += ((double)b[playhead * pchans]) * overdubamp;
+                        recin2 += ((double)b[(playhead * pchans) + 1]) * overdubamp;
+                        recin3 += ((double)b[(playhead * pchans) + 2]) * overdubamp;
+                        recin4 += ((double)b[(playhead * pchans) + 3]) * overdubamp;
                     }
                     if (recordhead < 0) {
                         recordhead = playhead;
@@ -5342,10 +5628,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             writeval4 = writeval4 / pokesteps;
                             pokesteps = 1.0;
                         }
-                        b[recordhead * nchan] = writeval1;
-                        b[(recordhead * nchan) + 1] = writeval2;
-                        b[(recordhead * nchan) + 2] = writeval3;
-                        b[(recordhead * nchan) + 3] = writeval4;
+                        b[recordhead * pchans] = writeval1;
+                        b[(recordhead * pchans) + 1] = writeval2;
+                        b[(recordhead * pchans) + 2] = writeval3;
+                        b[(recordhead * pchans) + 3] = writeval4;
                         recplaydif = (double)(playhead - recordhead);
                         if (recplaydif > 0) {                     // linear-interpolation for speed > 1x
                             coeff1 = (recin1 - writeval1) / recplaydif;
@@ -5357,10 +5643,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 writeval2 += coeff2;
                                 writeval3 += coeff3;
                                 writeval4 += coeff4;
-                                b[i * nchan] = writeval1;
-                                b[(i * nchan) + 1] = writeval2;
-                                b[(i * nchan) + 2] = writeval3;
-                                b[(i * nchan) + 3] = writeval4;
+                                b[i * pchans] = writeval1;
+                                b[(i * pchans) + 1] = writeval2;
+                                b[(i * pchans) + 2] = writeval3;
+                                b[(i * pchans) + 3] = writeval4;
                             }
                         } else {
                             coeff1 = (recin1 - writeval1) / recplaydif;
@@ -5372,10 +5658,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 writeval2 -= coeff2;
                                 writeval3 -= coeff3;
                                 writeval4 -= coeff4;
-                                b[i * nchan] = writeval1;
-                                b[(i * nchan) + 1] = writeval2;
-                                b[(i * nchan) + 2] = writeval3;
-                                b[(i * nchan) + 3] = writeval4;
+                                b[i * pchans] = writeval1;
+                                b[(i * pchans) + 1] = writeval2;
+                                b[(i * pchans) + 2] = writeval3;
+                                b[(i * pchans) + 3] = writeval4;
                             }
                         }
                         writeval1 = recin1;
@@ -5418,6 +5704,9 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                     }
                 }
                 directionprev = direction;
+                
+                // !! 'looprecord'
+                
             } else {                                        // initial loop creation
                 if (go)
                 {
@@ -5434,7 +5723,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             snrfade = 0.0;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recfadeflag = 0;
@@ -5448,7 +5737,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             {
                                 accuratehead = maxhead;
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recordalt = 1;
@@ -5480,7 +5769,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 record = append;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                        ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                         recordhead = -1;
                                         recfadeflag = recordfade = 0;
                                     }
@@ -5493,7 +5782,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 record = append;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufoff(frames - 1, b, nchan, 0.0, -direction, globalramp);
+                                        ease_bufoff(frames - 1, b, pchans, 0.0, -direction, globalramp);
                                         recordhead = -1;
                                         recfadeflag = recordfade = 0;
                                     }
@@ -5510,7 +5799,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             {
                                 accuratehead = maxhead + accuratehead;
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, 0.0, -direction, globalramp);
+                                    ease_bufoff(frames - 1, b, pchans, 0.0, -direction, globalramp);
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -5520,7 +5809,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             {
                                 accuratehead = maxhead + (accuratehead - (frames - 1));
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                    ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -5616,15 +5905,15 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 if (record)
                 {
                     if ((recordfade < globalramp) && (globalramp > 0.0)) {
-                        recin1 = ease_record(recin1 + ((double)b[playhead * nchan]) * overdubamp, recfadeflag, globalramp, recordfade);
-                        recin2 = ease_record(recin2 + ((double)b[(playhead * nchan) + 1]) * overdubamp, recfadeflag, globalramp, recordfade);
-                        recin3 = ease_record(recin3 + ((double)b[(playhead * nchan) + 2]) * overdubamp, recfadeflag, globalramp, recordfade);
-                        recin4 = ease_record(recin4 + ((double)b[(playhead * nchan) + 3]) * overdubamp, recfadeflag, globalramp, recordfade);
+                        recin1 = ease_record(recin1 + ((double)b[playhead * pchans]) * overdubamp, recfadeflag, globalramp, recordfade);
+                        recin2 = ease_record(recin2 + ((double)b[(playhead * pchans) + 1]) * overdubamp, recfadeflag, globalramp, recordfade);
+                        recin3 = ease_record(recin3 + ((double)b[(playhead * pchans) + 2]) * overdubamp, recfadeflag, globalramp, recordfade);
+                        recin4 = ease_record(recin4 + ((double)b[(playhead * pchans) + 3]) * overdubamp, recfadeflag, globalramp, recordfade);
                     } else {
-                        recin1 += ((double)b[playhead * nchan]) * overdubamp;
-                        recin2 += ((double)b[(playhead * nchan) + 1]) * overdubamp;
-                        recin3 += ((double)b[(playhead * nchan) + 2]) * overdubamp;
-                        recin4 += ((double)b[(playhead * nchan) + 3]) * overdubamp;
+                        recin1 += ((double)b[playhead * pchans]) * overdubamp;
+                        recin2 += ((double)b[(playhead * pchans) + 1]) * overdubamp;
+                        recin3 += ((double)b[(playhead * pchans) + 2]) * overdubamp;
+                        recin4 += ((double)b[(playhead * pchans) + 3]) * overdubamp;
                     }
                     if (recordhead < 0) {
                         recordhead = playhead;
@@ -5646,10 +5935,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             writeval4 = writeval4 / pokesteps;
                             pokesteps = 1.0;
                         }
-                        b[recordhead * nchan] = writeval1;
-                        b[(recordhead * nchan) + 1] = writeval2;
-                        b[(recordhead * nchan) + 2] = writeval3;
-                        b[(recordhead * nchan) + 3] = writeval4;
+                        b[recordhead * pchans] = writeval1;
+                        b[(recordhead * pchans) + 1] = writeval2;
+                        b[(recordhead * pchans) + 2] = writeval3;
+                        b[(recordhead * pchans) + 3] = writeval4;
                         recplaydif = (double)(playhead - recordhead);        // linear-interp for speed > 1x
                         if (direction != directionorig)
                         {
@@ -5669,20 +5958,20 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                             writeval2 -= coeff2;
                                             writeval3 -= coeff3;
                                             writeval4 -= coeff4;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
-                                            b[(i * nchan) + 3] = writeval4;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
+                                            b[(i * pchans) + 3] = writeval4;
                                         }
                                         for (i = maxhead; i > playhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
                                             writeval3 -= coeff3;
                                             writeval4 -= coeff4;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
-                                            b[(i * nchan) + 3] = writeval4;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
+                                            b[(i * pchans) + 3] = writeval4;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -5694,10 +5983,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                             writeval2 += coeff2;
                                             writeval3 += coeff3;
                                             writeval4 += coeff4;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
-                                            b[(i * nchan) + 3] = writeval4;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
+                                            b[(i * pchans) + 3] = writeval4;
                                         }
                                     }
                                 } else {
@@ -5713,20 +6002,20 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                             writeval2 += coeff2;
                                             writeval3 += coeff3;
                                             writeval4 += coeff4;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
-                                            b[(i * nchan) + 3] = writeval4;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
+                                            b[(i * pchans) + 3] = writeval4;
                                         }
                                         for (i = 0; i < playhead; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
                                             writeval3 += coeff3;
                                             writeval4 += coeff4;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
-                                            b[(i * nchan) + 3] = writeval4;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
+                                            b[(i * pchans) + 3] = writeval4;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -5738,10 +6027,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                             writeval2 -= coeff2;
                                             writeval3 -= coeff3;
                                             writeval4 -= coeff4;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
-                                            b[(i * nchan) + 3] = writeval4;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
+                                            b[(i * pchans) + 3] = writeval4;
                                         }
                                     }
                                 }
@@ -5760,20 +6049,20 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                             writeval2 -= coeff2;
                                             writeval3 -= coeff3;
                                             writeval4 -= coeff4;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
-                                            b[(i * nchan) + 3] = writeval4;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
+                                            b[(i * pchans) + 3] = writeval4;
                                         }
                                         for (i = (frames - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
                                             writeval3 -= coeff3;
                                             writeval4 -= coeff4;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
-                                            b[(i * nchan) + 3] = writeval4;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
+                                            b[(i * pchans) + 3] = writeval4;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -5785,10 +6074,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                             writeval2 += coeff2;
                                             writeval3 += coeff3;
                                             writeval4 += coeff4;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
-                                            b[(i * nchan) + 3] = writeval4;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
+                                            b[(i * pchans) + 3] = writeval4;
                                         }
                                     }
                                 } else {
@@ -5804,20 +6093,20 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                             writeval2 += coeff2;
                                             writeval3 += coeff3;
                                             writeval4 += coeff4;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
-                                            b[(i * nchan) + 3] = writeval4;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
+                                            b[(i * pchans) + 3] = writeval4;
                                         }
                                         for (i = maxhead; i < playhead; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
                                             writeval3 += coeff3;
                                             writeval4 += coeff4;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
-                                            b[(i * nchan) + 3] = writeval4;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
+                                            b[(i * pchans) + 3] = writeval4;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -5829,10 +6118,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                             writeval2 -= coeff2;
                                             writeval3 -= coeff3;
                                             writeval4 -= coeff4;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
-                                            b[(i * nchan) + 3] = writeval4;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
+                                            b[(i * pchans) + 3] = writeval4;
                                         }
                                     }
                                 }
@@ -5849,10 +6138,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     writeval2 += coeff2;
                                     writeval3 += coeff3;
                                     writeval4 += coeff4;
-                                    b[i * nchan] = writeval1;
-                                    b[(i * nchan) + 1] = writeval2;
-                                    b[(i * nchan) + 2] = writeval3;
-                                    b[(i * nchan) + 3] = writeval4;
+                                    b[i * pchans] = writeval1;
+                                    b[(i * pchans) + 1] = writeval2;
+                                    b[(i * pchans) + 2] = writeval3;
+                                    b[(i * pchans) + 3] = writeval4;
                                 }
                             } else {
                                 coeff1 = (recin1 - writeval1) / recplaydif;
@@ -5864,10 +6153,10 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     writeval2 -= coeff2;
                                     writeval3 -= coeff3;
                                     writeval4 -= coeff4;
-                                    b[i * nchan] = writeval1;
-                                    b[(i * nchan) + 1] = writeval2;
-                                    b[(i * nchan) + 2] = writeval3;
-                                    b[(i * nchan) + 3] = writeval4;
+                                    b[i * pchans] = writeval1;
+                                    b[(i * pchans) + 1] = writeval2;
+                                    b[(i * pchans) + 2] = writeval3;
+                                    b[(i * pchans) + 3] = writeval4;
                                 }
                             }
                         }
@@ -5963,7 +6252,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
         }
         
     }
-    else if (nchan == 3)
+    else if (pchans == 3)
     {
 
         while (n--)
@@ -5972,13 +6261,13 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             recin2 = *in2++;
             recin3 = *in3++;
             recin4 = *in4++;
-            speed = *in5++;
+            speed = speedinlet ? *in5++ : speedfloat;   // signal of float ?
             direction = (speed > 0) ? 1 : ((speed < 0) ? -1 : 0);
             
             // declick for change of 'dir'ection
             if (directionprev != direction) {
                 if (record && globalramp) {
-                    ease_bufoff(frames - 1, b, nchan, recordhead, -direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, recordhead, -direction, globalramp);
                     recordfade = recfadeflag = 0;
                     recordhead = -1;
                 }
@@ -5987,7 +6276,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             
             if ((record - recordprev) < 0) {           // samp @record-off
                 if (globalramp)
-                    ease_bufoff(frames - 1, b, nchan, recordhead, direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, recordhead, direction, globalramp);
                 recordhead = -1;
                 dirt = 1;
             } else if ((record - recordprev) > 0) {    // samp @record-on
@@ -5995,7 +6284,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 if (speed < 1.0)
                     snrfade = 0.0;
                 if (globalramp)
-                    ease_bufoff(frames - 1, b, nchan, accuratehead, -direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, accuratehead, -direction, globalramp);
             }
             recordprev = record;
             
@@ -6021,7 +6310,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 }
                                 if (direction < 0) {
                                     if (globalramp)
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
@@ -6037,11 +6326,11 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 accuratehead = endloop;
                                 if (direction > 0) {
                                     if (globalramp)
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 }
                             }
                             if (globalramp)
-                                ease_bufoff(frames - 1, b, nchan, maxhead, -direction, globalramp);
+                                ease_bufoff(frames - 1, b, pchans, maxhead, -direction, globalramp);
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
@@ -6054,7 +6343,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recordhead = -1;
@@ -6088,7 +6377,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -6099,7 +6388,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -6113,7 +6402,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -6124,7 +6413,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -6141,7 +6430,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -6154,7 +6443,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, maxloop, -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, maxloop, -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -6167,7 +6456,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
+                                                ease_bufoff(frames - 1, b, pchans, minloop, -direction, globalramp);     // 0.0  // ??
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -6182,7 +6471,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         if (record)
                                         {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, ((frames - 1) - maxloop), -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, ((frames - 1) - maxloop), -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -6193,7 +6482,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -6208,7 +6497,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -6227,26 +6516,26 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         frac = 1.0 - (accuratehead - playhead);
                     } else {
                         frac = 0.0;
-                    }
-                    interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);     // find samp-indices 4 interp
+                    }                                                                                   // setloopsize  // ??
+                    interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);  // samp-indices for interp
                     
                     if (record) {              // if recording do linear-interp else...
-                        osamp1 =    LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
-                        osamp2 =    LINEAR_INTERP(frac, b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1]);
-                        osamp3 =    LINEAR_INTERP(frac, b[(interp1 * nchan) + 2], b[(interp2 * nchan) + 2]);
+                        osamp1 =    LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
+                        osamp2 =    LINEAR_INTERP(frac, b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1]);
+                        osamp3 =    LINEAR_INTERP(frac, b[(interp1 * pchans) + 2], b[(interp2 * pchans) + 2]);
                     } else {                // ...cubic / spline if interpflag > 0 (default cubic)
                         if (interp == 1) {
-                            osamp1  = CUBIC_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
-                            osamp2  = CUBIC_INTERP(frac, b[(interp0 * nchan) + 1], b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1], b[(interp3 * nchan) + 1]);
-                            osamp3  = CUBIC_INTERP(frac, b[(interp0 * nchan) + 2], b[(interp1 * nchan) + 2], b[(interp2 * nchan) + 2], b[(interp3 * nchan) + 2]);
+                            osamp1  = CUBIC_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
+                            osamp2  = CUBIC_INTERP(frac, b[(interp0 * pchans) + 1], b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1], b[(interp3 * pchans) + 1]);
+                            osamp3  = CUBIC_INTERP(frac, b[(interp0 * pchans) + 2], b[(interp1 * pchans) + 2], b[(interp2 * pchans) + 2], b[(interp3 * pchans) + 2]);
                         } else if (interp == 2) {
-                            osamp1  = SPLINE_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
-                            osamp2  = SPLINE_INTERP(frac, b[(interp0 * nchan) + 1], b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1], b[(interp3 * nchan) + 1]);
-                            osamp3  = SPLINE_INTERP(frac, b[(interp0 * nchan) + 2], b[(interp1 * nchan) + 2], b[(interp2 * nchan) + 2], b[(interp3 * nchan) + 2]);
+                            osamp1  = SPLINE_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
+                            osamp2  = SPLINE_INTERP(frac, b[(interp0 * pchans) + 1], b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1], b[(interp3 * pchans) + 1]);
+                            osamp3  = SPLINE_INTERP(frac, b[(interp0 * pchans) + 2], b[(interp1 * pchans) + 2], b[(interp2 * pchans) + 2], b[(interp3 * pchans) + 2]);
                         } else {
-                            osamp1  = LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
-                            osamp2  = LINEAR_INTERP(frac, b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1]);
-                            osamp3  = LINEAR_INTERP(frac, b[(interp1 * nchan) + 2], b[(interp2 * nchan) + 2]);
+                            osamp1  = LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
+                            osamp2  = LINEAR_INTERP(frac, b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1]);
+                            osamp3  = LINEAR_INTERP(frac, b[(interp1 * pchans) + 2], b[(interp2 * pchans) + 2]);
                         }
                     }
                     
@@ -6341,20 +6630,20 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                  ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
                  (modded to allow for 'window' and 'position' to change on the fly)
                  raja's razor: simplest answer to everything was:
-                 recin1 = ease_record(recin1 + (b[playhead * nchan] * overdubamp), recfadeflag, globalramp, recordfade); ...
+                 recin1 = ease_record(recin1 + (b[playhead * pchans] * overdubamp), recfadeflag, globalramp, recordfade); ...
                  ... placed at the beginning / input of ipoke~ code to apply appropriate ramps to oldbuf + newinput (everything all-at-once) ...
                  ... allows ipoke~ code to work its sample-specific math / magic accurately through the ducking / ramps even at high speed
                  */
                 if (record)
                 {
                     if ((recordfade < globalramp) && (globalramp > 0.0)) {
-                        recin1 = ease_record(recin1 + (((double)b[playhead * nchan]) * overdubamp), recfadeflag, globalramp, recordfade);
-                        recin2 = ease_record(recin2 + (((double)b[(playhead * nchan) + 1]) * overdubamp), recfadeflag, globalramp, recordfade);
-                        recin3 = ease_record(recin3 + (((double)b[(playhead * nchan) + 2]) * overdubamp), recfadeflag, globalramp, recordfade);
+                        recin1 = ease_record(recin1 + (((double)b[playhead * pchans]) * overdubamp), recfadeflag, globalramp, recordfade);
+                        recin2 = ease_record(recin2 + (((double)b[(playhead * pchans) + 1]) * overdubamp), recfadeflag, globalramp, recordfade);
+                        recin3 = ease_record(recin3 + (((double)b[(playhead * pchans) + 2]) * overdubamp), recfadeflag, globalramp, recordfade);
                     } else {
-                        recin1 += ((double)b[playhead * nchan]) * overdubamp;
-                        recin2 += ((double)b[(playhead * nchan) + 1]) * overdubamp;
-                        recin3 += ((double)b[(playhead * nchan) + 2]) * overdubamp;
+                        recin1 += ((double)b[playhead * pchans]) * overdubamp;
+                        recin2 += ((double)b[(playhead * pchans) + 1]) * overdubamp;
+                        recin3 += ((double)b[(playhead * pchans) + 2]) * overdubamp;
                     }
                     if (recordhead < 0) {
                         recordhead = playhead;
@@ -6374,9 +6663,9 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             writeval3 = writeval3 / pokesteps;
                             pokesteps = 1.0;
                         }
-                        b[recordhead * nchan] = writeval1;
-                        b[(recordhead * nchan) + 1] = writeval2;
-                        b[(recordhead * nchan) + 2] = writeval3;
+                        b[recordhead * pchans] = writeval1;
+                        b[(recordhead * pchans) + 1] = writeval2;
+                        b[(recordhead * pchans) + 2] = writeval3;
                         recplaydif = (double)(playhead - recordhead);
                         if (recplaydif > 0) {                     // linear-interpolation for speed > 1x
                             coeff1 = (recin1 - writeval1) / recplaydif;
@@ -6386,9 +6675,9 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 writeval1 += coeff1;
                                 writeval2 += coeff2;
                                 writeval3 += coeff3;
-                                b[i * nchan] = writeval1;
-                                b[(i * nchan) + 1] = writeval2;
-                                b[(i * nchan) + 2] = writeval3;
+                                b[i * pchans] = writeval1;
+                                b[(i * pchans) + 1] = writeval2;
+                                b[(i * pchans) + 2] = writeval3;
                             }
                         } else {
                             coeff1 = (recin1 - writeval1) / recplaydif;
@@ -6398,9 +6687,9 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 writeval1 -= coeff1;
                                 writeval2 -= coeff2;
                                 writeval3 -= coeff3;
-                                b[i * nchan] = writeval1;
-                                b[(i * nchan) + 1] = writeval2;
-                                b[(i * nchan) + 2] = writeval3;
+                                b[i * pchans] = writeval1;
+                                b[(i * pchans) + 1] = writeval2;
+                                b[(i * pchans) + 2] = writeval3;
                             }
                         }
                         writeval1 = recin1;
@@ -6442,6 +6731,9 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                     }
                 }
                 directionprev = direction;
+                
+                // !! 'looprecord'
+                
             } else {                                        // initial loop creation
                 if (go)
                 {
@@ -6458,7 +6750,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             snrfade = 0.0;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recfadeflag = 0;
@@ -6472,7 +6764,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             {
                                 accuratehead = maxhead;
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recordalt = 1;
@@ -6504,7 +6796,7 @@ apden:
                                 record = append;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                        ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                         recordhead = -1;
                                         recfadeflag = recordfade = 0;
                                     }
@@ -6517,7 +6809,7 @@ apden:
                                 record = append;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufoff(frames - 1, b, nchan, 0.0, -direction, globalramp);
+                                        ease_bufoff(frames - 1, b, pchans, 0.0, -direction, globalramp);
                                         recordhead = -1;
                                         recfadeflag = recordfade = 0;
                                     }
@@ -6534,7 +6826,7 @@ apden:
                             {
                                 accuratehead = maxhead + accuratehead;
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, 0.0, -direction, globalramp);
+                                    ease_bufoff(frames - 1, b, pchans, 0.0, -direction, globalramp);
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -6544,7 +6836,7 @@ apden:
                             {
                                 accuratehead = maxhead + (accuratehead - (frames - 1));
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                    ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -6639,13 +6931,13 @@ apden:
                 if (record)
                 {
                     if ((recordfade < globalramp) && (globalramp > 0.0)) {
-                        recin1 = ease_record(recin1 + ((double)b[playhead * nchan]) * overdubamp, recfadeflag, globalramp, recordfade);
-                        recin2 = ease_record(recin2 + ((double)b[(playhead * nchan) + 1]) * overdubamp, recfadeflag, globalramp, recordfade);
-                        recin3 = ease_record(recin3 + ((double)b[(playhead * nchan) + 2]) * overdubamp, recfadeflag, globalramp, recordfade);
+                        recin1 = ease_record(recin1 + ((double)b[playhead * pchans]) * overdubamp, recfadeflag, globalramp, recordfade);
+                        recin2 = ease_record(recin2 + ((double)b[(playhead * pchans) + 1]) * overdubamp, recfadeflag, globalramp, recordfade);
+                        recin3 = ease_record(recin3 + ((double)b[(playhead * pchans) + 2]) * overdubamp, recfadeflag, globalramp, recordfade);
                     } else {
-                        recin1 += ((double)b[playhead * nchan]) * overdubamp;
-                        recin2 += ((double)b[(playhead * nchan) + 1]) * overdubamp;
-                        recin3 += ((double)b[(playhead * nchan) + 2]) * overdubamp;
+                        recin1 += ((double)b[playhead * pchans]) * overdubamp;
+                        recin2 += ((double)b[(playhead * pchans) + 1]) * overdubamp;
+                        recin3 += ((double)b[(playhead * pchans) + 2]) * overdubamp;
                     }
                     if (recordhead < 0) {
                         recordhead = playhead;
@@ -6665,9 +6957,9 @@ apden:
                             writeval3 = writeval3 / pokesteps;
                             pokesteps = 1.0;
                         }
-                        b[recordhead * nchan] = writeval1;
-                        b[(recordhead * nchan) + 1] = writeval2;
-                        b[(recordhead * nchan) + 2] = writeval3;
+                        b[recordhead * pchans] = writeval1;
+                        b[(recordhead * pchans) + 1] = writeval2;
+                        b[(recordhead * pchans) + 2] = writeval3;
                         recplaydif = (double)(playhead - recordhead);        // linear-interp for speed > 1x
                         if (direction != directionorig)
                         {
@@ -6685,17 +6977,17 @@ apden:
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
                                             writeval3 -= coeff3;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
                                         }
                                         for (i = maxhead; i > playhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
                                             writeval3 -= coeff3;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -6705,9 +6997,9 @@ apden:
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
                                             writeval3 += coeff3;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
                                         }
                                     }
                                 } else {
@@ -6721,17 +7013,17 @@ apden:
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
                                             writeval3 += coeff3;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
                                         }
                                         for (i = 0; i < playhead; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
                                             writeval3 += coeff3;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -6741,9 +7033,9 @@ apden:
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
                                             writeval3 -= coeff3;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
                                         }
                                     }
                                 }
@@ -6760,17 +7052,17 @@ apden:
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
                                             writeval3 -= coeff3;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
                                         }
                                         for (i = (frames - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
                                             writeval3 -= coeff3;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -6780,9 +7072,9 @@ apden:
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
                                             writeval3 += coeff3;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
                                         }
                                     }
                                 } else {
@@ -6796,17 +7088,17 @@ apden:
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
                                             writeval3 += coeff3;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
                                         }
                                         for (i = maxhead; i < playhead; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
                                             writeval3 += coeff3;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -6816,9 +7108,9 @@ apden:
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
                                             writeval3 -= coeff3;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
-                                            b[(i * nchan) + 2] = writeval3;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
+                                            b[(i * pchans) + 2] = writeval3;
                                         }
                                     }
                                 }
@@ -6833,9 +7125,9 @@ apden:
                                     writeval1 += coeff1;
                                     writeval2 += coeff2;
                                     writeval3 += coeff3;
-                                    b[i * nchan] = writeval1;
-                                    b[(i * nchan) + 1] = writeval2;
-                                    b[(i * nchan) + 2] = writeval3;
+                                    b[i * pchans] = writeval1;
+                                    b[(i * pchans) + 1] = writeval2;
+                                    b[(i * pchans) + 2] = writeval3;
                                 }
                             } else {
                                 coeff1 = (recin1 - writeval1) / recplaydif;
@@ -6845,9 +7137,9 @@ apden:
                                     writeval1 -= coeff1;
                                     writeval2 -= coeff2;
                                     writeval3 -= coeff3;
-                                    b[i * nchan] = writeval1;
-                                    b[(i * nchan) + 1] = writeval2;
-                                    b[(i * nchan) + 2] = writeval3;
+                                    b[i * pchans] = writeval1;
+                                    b[(i * pchans) + 1] = writeval2;
+                                    b[(i * pchans) + 2] = writeval3;
                                 }
                             }
                         }
@@ -6942,7 +7234,7 @@ apden:
         }
 
     }
-    else if (nchan == 2)
+    else if (pchans == 2)
     {
         while (n--)
         {
@@ -6950,13 +7242,13 @@ apden:
             recin2 = *in2++;
             recin3 = *in3++;
             recin4 = *in4++;
-            speed = *in5++;
+            speed = speedinlet ? *in5++ : speedfloat;   // signal of float ?
             direction = (speed > 0) ? 1 : ((speed < 0) ? -1 : 0);
             
             // declick for change of 'dir'ection
             if (directionprev != direction) {
                 if (record && globalramp) {
-                    ease_bufoff(frames - 1, b, nchan, recordhead, -direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, recordhead, -direction, globalramp);
                     recordfade = recfadeflag = 0;
                     recordhead = -1;
                 }
@@ -6965,7 +7257,7 @@ apden:
             
             if ((record - recordprev) < 0) {           // samp @record-off
                 if (globalramp)
-                    ease_bufoff(frames - 1, b, nchan, recordhead, direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, recordhead, direction, globalramp);
                 recordhead = -1;
                 dirt = 1;
             } else if ((record - recordprev) > 0) {    // samp @record-on
@@ -6973,7 +7265,7 @@ apden:
                 if (speed < 1.0)
                     snrfade = 0.0;
                 if (globalramp)
-                    ease_bufoff(frames - 1, b, nchan, accuratehead, -direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, accuratehead, -direction, globalramp);
             }
             recordprev = record;
             
@@ -6999,7 +7291,7 @@ apden:
                                 }
                                 if (direction < 0) {
                                     if (globalramp)
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
@@ -7015,11 +7307,11 @@ apden:
                                 accuratehead = endloop;
                                 if (direction > 0) {
                                     if (globalramp)
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 }
                             }
                             if (globalramp)
-                                ease_bufoff(frames - 1, b, nchan, maxhead, -direction, globalramp);
+                                ease_bufoff(frames - 1, b, pchans, maxhead, -direction, globalramp);
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
@@ -7032,7 +7324,7 @@ apden:
                                 accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recordhead = -1;
@@ -7066,7 +7358,7 @@ apden:
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -7077,7 +7369,7 @@ apden:
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -7091,7 +7383,7 @@ apden:
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -7102,7 +7394,7 @@ apden:
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -7119,7 +7411,7 @@ apden:
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -7132,7 +7424,7 @@ apden:
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, maxloop, -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, maxloop, -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -7145,7 +7437,7 @@ apden:
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
+                                                ease_bufoff(frames - 1, b, pchans, minloop, -direction, globalramp);     // 0.0  // ??
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -7160,7 +7452,7 @@ apden:
                                         if (record)
                                         {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, ((frames - 1) - maxloop), -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, ((frames - 1) - maxloop), -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -7171,7 +7463,7 @@ apden:
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -7186,7 +7478,7 @@ apden:
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -7205,22 +7497,22 @@ apden:
                         frac = 1.0 - (accuratehead - playhead);
                     } else {
                         frac = 0.0;
-                    }
-                    interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);     // find samp-indices 4 interp
+                    }                                                                                   // setloopsize  // ??
+                    interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);  // samp-indices for interp
                     
                     if (record) {              // if recording do linear-interp else...
-                        osamp1 =    LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
-                        osamp2 =    LINEAR_INTERP(frac, b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1]);
+                        osamp1 =    LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
+                        osamp2 =    LINEAR_INTERP(frac, b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1]);
                     } else {                // ...cubic / spline if interpflag > 0 (default cubic)
                         if (interp == 1) {
-                            osamp1  = CUBIC_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
-                            osamp2  = CUBIC_INTERP(frac, b[(interp0 * nchan) + 1], b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1], b[(interp3 * nchan) + 1]);
+                            osamp1  = CUBIC_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
+                            osamp2  = CUBIC_INTERP(frac, b[(interp0 * pchans) + 1], b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1], b[(interp3 * pchans) + 1]);
                         } else if (interp == 2) {
-                            osamp1  = SPLINE_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
-                            osamp2  = SPLINE_INTERP(frac, b[(interp0 * nchan) + 1], b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1], b[(interp3 * nchan) + 1]);
+                            osamp1  = SPLINE_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
+                            osamp2  = SPLINE_INTERP(frac, b[(interp0 * pchans) + 1], b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1], b[(interp3 * pchans) + 1]);
                         } else {
-                            osamp1  = LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
-                            osamp2  = LINEAR_INTERP(frac, b[(interp1 * nchan) + 1], b[(interp2 * nchan) + 1]);
+                            osamp1  = LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
+                            osamp2  = LINEAR_INTERP(frac, b[(interp1 * pchans) + 1], b[(interp2 * pchans) + 1]);
                         }
                     }
                     
@@ -7311,18 +7603,18 @@ apden:
                  ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
                  (modded to allow for 'window' and 'position' to change on the fly)
                  raja's razor: simplest answer to everything was:
-                 recin1 = ease_record(recin1 + (b[playhead * nchan] * overdubamp), recfadeflag, globalramp, recordfade); ...
+                 recin1 = ease_record(recin1 + (b[playhead * pchans] * overdubamp), recfadeflag, globalramp, recordfade); ...
                  ... placed at the beginning / input of ipoke~ code to apply appropriate ramps to oldbuf + newinput (everything all-at-once) ...
                  ... allows ipoke~ code to work its sample-specific math / magic accurately through the ducking / ramps even at high speed
                 */
                 if (record)
                 {
                     if ((recordfade < globalramp) && (globalramp > 0.0)) {
-                        recin1 = ease_record(recin1 + (((double)b[playhead * nchan]) * overdubamp), recfadeflag, globalramp, recordfade);
-                        recin2 = ease_record(recin2 + (((double)b[(playhead * nchan) + 1]) * overdubamp), recfadeflag, globalramp, recordfade);
+                        recin1 = ease_record(recin1 + (((double)b[playhead * pchans]) * overdubamp), recfadeflag, globalramp, recordfade);
+                        recin2 = ease_record(recin2 + (((double)b[(playhead * pchans) + 1]) * overdubamp), recfadeflag, globalramp, recordfade);
                     } else {
-                        recin1 += ((double)b[playhead * nchan]) * overdubamp;
-                        recin2 += ((double)b[(playhead * nchan) + 1]) * overdubamp;
+                        recin1 += ((double)b[playhead * pchans]) * overdubamp;
+                        recin2 += ((double)b[(playhead * pchans) + 1]) * overdubamp;
                     }
                     if (recordhead < 0) {
                         recordhead = playhead;
@@ -7340,8 +7632,8 @@ apden:
                             writeval2 = writeval2 / pokesteps;
                             pokesteps = 1.0;
                         }
-                        b[recordhead * nchan] = writeval1;
-                        b[(recordhead * nchan) + 1] = writeval2;
+                        b[recordhead * pchans] = writeval1;
+                        b[(recordhead * pchans) + 1] = writeval2;
                         recplaydif = (double)(playhead - recordhead);
                         if (recplaydif > 0) {                     // linear-interpolation for speed > 1x
                             coeff1 = (recin1 - writeval1) / recplaydif;
@@ -7349,8 +7641,8 @@ apden:
                             for (i = recordhead + 1; i < playhead; i++) {
                                 writeval1 += coeff1;
                                 writeval2 += coeff2;
-                                b[i * nchan] = writeval1;
-                                b[(i * nchan) + 1] = writeval2;
+                                b[i * pchans] = writeval1;
+                                b[(i * pchans) + 1] = writeval2;
                             }
                         } else {
                             coeff1 = (recin1 - writeval1) / recplaydif;
@@ -7358,8 +7650,8 @@ apden:
                             for (i = recordhead - 1; i > playhead; i--) {
                                 writeval1 -= coeff1;
                                 writeval2 -= coeff2;
-                                b[i * nchan] = writeval1;
-                                b[(i * nchan) + 1] = writeval2;
+                                b[i * pchans] = writeval1;
+                                b[(i * pchans) + 1] = writeval2;
                             }
                         }
                         writeval1 = recin1;
@@ -7400,6 +7692,9 @@ apden:
                     }
                 }
                 directionprev = direction;
+                
+                // !! 'looprecord'
+                
             } else {                                        // initial loop creation
                 if (go)
                 {
@@ -7416,7 +7711,7 @@ apden:
                             snrfade = 0.0;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recfadeflag = 0;
@@ -7430,7 +7725,7 @@ apden:
                             {
                                 accuratehead = maxhead;
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recordalt = 1;
@@ -7462,7 +7757,7 @@ apdne:
                                 record = append;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                        ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                         recordhead = -1;
                                         recfadeflag = recordfade = 0;
                                     }
@@ -7475,7 +7770,7 @@ apdne:
                                 record = append;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufoff(frames - 1, b, nchan, 0.0, -direction, globalramp);
+                                        ease_bufoff(frames - 1, b, pchans, 0.0, -direction, globalramp);
                                         recordhead = -1;
                                         recfadeflag = recordfade = 0;
                                     }
@@ -7492,7 +7787,7 @@ apdne:
                             {
                                 accuratehead = maxhead + accuratehead;
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, 0.0, -direction, globalramp);
+                                    ease_bufoff(frames - 1, b, pchans, 0.0, -direction, globalramp);
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -7502,7 +7797,7 @@ apdne:
                             {
                                 accuratehead = maxhead + (accuratehead - (frames - 1));
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                    ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -7596,11 +7891,11 @@ apdne:
                 if (record)
                 {
                     if ((recordfade < globalramp) && (globalramp > 0.0)) {
-                        recin1 = ease_record(recin1 + ((double)b[playhead * nchan]) * overdubamp, recfadeflag, globalramp, recordfade);
-                        recin2 = ease_record(recin2 + ((double)b[(playhead * nchan) + 1]) * overdubamp, recfadeflag, globalramp, recordfade);
+                        recin1 = ease_record(recin1 + ((double)b[playhead * pchans]) * overdubamp, recfadeflag, globalramp, recordfade);
+                        recin2 = ease_record(recin2 + ((double)b[(playhead * pchans) + 1]) * overdubamp, recfadeflag, globalramp, recordfade);
                     } else {
-                        recin1 += ((double)b[playhead * nchan]) * overdubamp;
-                        recin2 += ((double)b[(playhead * nchan) + 1]) * overdubamp;
+                        recin1 += ((double)b[playhead * pchans]) * overdubamp;
+                        recin2 += ((double)b[(playhead * pchans) + 1]) * overdubamp;
                     }
                     if (recordhead < 0) {
                         recordhead = playhead;
@@ -7618,8 +7913,8 @@ apdne:
                             writeval2 = writeval2 / pokesteps;
                             pokesteps = 1.0;
                         }
-                        b[recordhead * nchan] = writeval1;
-                        b[(recordhead * nchan) + 1] = writeval2;
+                        b[recordhead * pchans] = writeval1;
+                        b[(recordhead * pchans) + 1] = writeval2;
                         recplaydif = (double)(playhead - recordhead);        // linear-interp for speed > 1x
                         if (direction != directionorig)
                         {
@@ -7635,14 +7930,14 @@ apdne:
                                         for (i = (recordhead - 1); i >= 0; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                         for (i = maxhead; i > playhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -7650,8 +7945,8 @@ apdne:
                                         for (i = (recordhead + 1); i < playhead; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     }
                                 } else {
@@ -7663,14 +7958,14 @@ apdne:
                                         for (i = (recordhead + 1); i < (maxhead + 1); i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                         for (i = 0; i < playhead; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -7678,8 +7973,8 @@ apdne:
                                         for (i = (recordhead - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     }
                                 }
@@ -7694,14 +7989,14 @@ apdne:
                                         for (i = (recordhead - 1); i >= maxhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                         for (i = (frames - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -7709,8 +8004,8 @@ apdne:
                                         for (i = (recordhead + 1); i < playhead; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     }
                                 } else {
@@ -7722,14 +8017,14 @@ apdne:
                                         for (i = (recordhead + 1); i < frames; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                         for (i = maxhead; i < playhead; i++) {
                                             writeval1 += coeff1;
                                             writeval2 += coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
@@ -7737,8 +8032,8 @@ apdne:
                                         for (i = (recordhead - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
                                             writeval2 -= coeff2;
-                                            b[i * nchan] = writeval1;
-                                            b[(i * nchan) + 1] = writeval2;
+                                            b[i * pchans] = writeval1;
+                                            b[(i * pchans) + 1] = writeval2;
                                         }
                                     }
                                 }
@@ -7751,8 +8046,8 @@ apdne:
                                 for (i = (recordhead + 1); i < playhead; i++) {
                                     writeval1 += coeff1;
                                     writeval2 += coeff2;
-                                    b[i * nchan] = writeval1;
-                                    b[(i * nchan) + 1] = writeval2;
+                                    b[i * pchans] = writeval1;
+                                    b[(i * pchans) + 1] = writeval2;
                                 }
                             } else {
                                 coeff1 = (recin1 - writeval1) / recplaydif;
@@ -7760,8 +8055,8 @@ apdne:
                                 for (i = (recordhead - 1); i > playhead; i--) {
                                     writeval1 -= coeff1;
                                     writeval2 -= coeff2;
-                                    b[i * nchan] = writeval1;
-                                    b[(i * nchan) + 1] = writeval2;
+                                    b[i * pchans] = writeval1;
+                                    b[(i * pchans) + 1] = writeval2;
                                 }
                             }
                         }
@@ -7864,13 +8159,13 @@ apdne:
             recin2 = *in2++;
             recin3 = *in3++;
             recin4 = *in4++;
-            speed = *in5++;
+            speed = speedinlet ? *in5++ : speedfloat;   // signal of float ?
             direction = (speed > 0) ? 1 : ((speed < 0) ? -1 : 0);
             
             // declick for change of 'dir'ection
             if (directionprev != direction) {
                 if (record && globalramp) {
-                    ease_bufoff(frames - 1, b, nchan, recordhead, -direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, recordhead, -direction, globalramp);
                     recordfade = recfadeflag = 0;
                     recordhead = -1;
                 }
@@ -7879,7 +8174,7 @@ apdne:
             
             if ((record - recordprev) < 0) {           // samp @record-off
                 if (globalramp)
-                    ease_bufoff(frames - 1, b, nchan, recordhead, direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, recordhead, direction, globalramp);
                 recordhead = -1;
                 dirt = 1;
             } else if ((record - recordprev) > 0) {    // samp @record-on
@@ -7887,7 +8182,7 @@ apdne:
                 if (speed < 1.0)
                     snrfade = 0.0;
                 if (globalramp)
-                    ease_bufoff(frames - 1, b, nchan, accuratehead, -direction, globalramp);
+                    ease_bufoff(frames - 1, b, pchans, accuratehead, -direction, globalramp);
             }
             recordprev = record;
             
@@ -7913,7 +8208,7 @@ apdne:
                                 }
                                 if (direction < 0) {
                                     if (globalramp)
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 }
                             } else {
                                 maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
@@ -7929,11 +8224,11 @@ apdne:
                                 accuratehead = endloop;
                                 if (direction > 0) {
                                     if (globalramp)
-                                        ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                        ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 }
                             }
                             if (globalramp)
-                                ease_bufoff(frames - 1, b, nchan, maxhead, -direction, globalramp);
+                                ease_bufoff(frames - 1, b, pchans, maxhead, -direction, globalramp);
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
@@ -7946,7 +8241,7 @@ apdne:
                                 accuratehead = (direction < 0) ? endloop : startloop;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recordhead = -1;
@@ -7980,7 +8275,7 @@ apdne:
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -7991,7 +8286,7 @@ apdne:
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -8005,7 +8300,7 @@ apdne:
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -8016,7 +8311,7 @@ apdne:
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -8033,7 +8328,7 @@ apdne:
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -8046,7 +8341,7 @@ apdne:
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, maxloop, -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, maxloop, -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -8059,7 +8354,7 @@ apdne:
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, minloop, -direction, globalramp);     // 0.0  // ??
+                                                ease_bufoff(frames - 1, b, pchans, minloop, -direction, globalramp);     // 0.0  // ??
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -8074,7 +8369,7 @@ apdne:
                                         if (record)
                                         {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, ((frames - 1) - maxloop), -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, ((frames - 1) - maxloop), -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -8085,7 +8380,7 @@ apdne:
                                         snrfade = 0.0;
                                         if (record) {
                                             if (globalramp) {
-                                                ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                                ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                                 recordfade = 0;
                                             }
                                             recfadeflag = 0;
@@ -8100,7 +8395,7 @@ apdne:
                                     snrfade = 0.0;
                                     if (record) {
                                         if (globalramp) {
-                                            ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                             recordfade = 0;
                                         }
                                         recfadeflag = 0;
@@ -8119,18 +8414,18 @@ apdne:
                         frac = 1.0 - (accuratehead - playhead);
                     } else {
                         frac = 0.0;
-                    }
-                    interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);     // find samp-indices 4 interp
+                    }                                                                                   // setloopsize  // ??
+                    interp_index(playhead, &interp0, &interp1, &interp2, &interp3, direction, directionorig, maxloop, frames - 1);  // samp-indices for interp
                     
                     if (record) {              // if recording do linear-interp else...
-                        osamp1 =    LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
+                        osamp1 =    LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
                     } else {                // ...cubic / spline if interpflag > 0 (default cubic)
                         if (interp == 1)
-                            osamp1  = CUBIC_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
+                            osamp1  = CUBIC_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
                         else if (interp == 2)
-                            osamp1  = SPLINE_INTERP(frac, b[interp0 * nchan], b[interp1 * nchan], b[interp2 * nchan], b[interp3 * nchan]);
+                            osamp1  = SPLINE_INTERP(frac, b[interp0 * pchans], b[interp1 * pchans], b[interp2 * pchans], b[interp3 * pchans]);
                         else
-                            osamp1  = LINEAR_INTERP(frac, b[interp1 * nchan], b[interp2 * nchan]);
+                            osamp1  = LINEAR_INTERP(frac, b[interp1 * pchans], b[interp2 * pchans]);
                     }
                     
                     if (globalramp)
@@ -8216,16 +8511,16 @@ apdne:
                  ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
                  (modded to allow for 'window' and 'position' to change on the fly)
                  raja's razor: simplest answer to everything was:
-                 recin1 = ease_record(recin1 + (b[playhead * nchan] * overdubamp), recfadeflag, globalramp, recordfade); ...
+                 recin1 = ease_record(recin1 + (b[playhead * pchans] * overdubamp), recfadeflag, globalramp, recordfade); ...
                  ... placed at the beginning / input of ipoke~ code to apply appropriate ramps to oldbuf + newinput (everything all-at-once) ...
                  ... allows ipoke~ code to work its sample-specific math / magic accurately through the ducking / ramps even at high speed
                 */
                 if (record)
                 {
                     if ((recordfade < globalramp) && (globalramp > 0.0))
-                        recin1 = ease_record(recin1 + (((double)b[playhead * nchan]) * overdubamp), recfadeflag, globalramp, recordfade);
+                        recin1 = ease_record(recin1 + (((double)b[playhead * pchans]) * overdubamp), recfadeflag, globalramp, recordfade);
                     else
-                        recin1 += ((double)b[playhead * nchan]) * overdubamp;
+                        recin1 += ((double)b[playhead * pchans]) * overdubamp;
                     
                     if (recordhead < 0) {
                         recordhead = playhead;
@@ -8241,19 +8536,19 @@ apdne:
                             writeval1 = writeval1 / pokesteps;
                             pokesteps = 1.0;
                         }
-                        b[recordhead * nchan] = writeval1;
+                        b[recordhead * pchans] = writeval1;
                         recplaydif = (double)(playhead - recordhead);
                         if (recplaydif > 0) {                     // linear-interpolation for speed > 1x
                             coeff1 = (recin1 - writeval1) / recplaydif;
                             for (i = recordhead + 1; i < playhead; i++) {
                                 writeval1 += coeff1;
-                                b[i * nchan] = writeval1;
+                                b[i * pchans] = writeval1;
                             }
                         } else {
                             coeff1 = (recin1 - writeval1) / recplaydif;
                             for (i = recordhead - 1; i > playhead; i--) {
                                 writeval1 -= coeff1;
-                                b[i * nchan] = writeval1;
+                                b[i * pchans] = writeval1;
                             }
                         }
                         writeval1 = recin1;
@@ -8293,6 +8588,9 @@ apdne:
                     }
                 }
                 directionprev = direction;
+                
+                // !! 'looprecord'
+                
             } else {                                        // initial loop creation
                 if (go)
                 {
@@ -8309,7 +8607,7 @@ apdne:
                             snrfade = 0.0;
                             if (record) {
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recfadeflag = 0;
@@ -8323,7 +8621,7 @@ apdne:
                             {
                                 accuratehead = maxhead;
                                 if (globalramp) {
-                                    ease_bufon(frames - 1, b, nchan, accuratehead, recordhead, direction, globalramp);
+                                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
                                 recordalt = 1;
@@ -8355,7 +8653,7 @@ apnde:
                                 record = append;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                        ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                         recordhead = -1;
                                         recfadeflag = recordfade = 0;
                                     }
@@ -8368,7 +8666,7 @@ apnde:
                                 record = append;
                                 if (record) {
                                     if (globalramp) {
-                                        ease_bufoff(frames - 1, b, nchan, 0.0, -direction, globalramp);
+                                        ease_bufoff(frames - 1, b, pchans, 0.0, -direction, globalramp);
                                         recordhead = -1;
                                         recfadeflag = recordfade = 0;
                                     }
@@ -8385,7 +8683,7 @@ apnde:
                             {
                                 accuratehead = maxhead + accuratehead;
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, 0.0, -direction, globalramp);
+                                    ease_bufoff(frames - 1, b, pchans, 0.0, -direction, globalramp);
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -8395,7 +8693,7 @@ apnde:
                             {
                                 accuratehead = maxhead + (accuratehead - (frames - 1));
                                 if (globalramp) {
-                                    ease_bufoff(frames - 1, b, nchan, (frames - 1), -direction, globalramp);
+                                    ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
                                     recordhead = -1;
                                     recfadeflag = recordfade = 0;
                                 }
@@ -8491,9 +8789,9 @@ apnde:
                 if (record)
                 {
                     if ((recordfade < globalramp) && (globalramp > 0.0))
-                        recin1 = ease_record(recin1 + ((double)b[playhead * nchan]) * overdubamp, recfadeflag, globalramp, recordfade);
+                        recin1 = ease_record(recin1 + ((double)b[playhead * pchans]) * overdubamp, recfadeflag, globalramp, recordfade);
                     else
-                        recin1 += ((double)b[playhead * nchan]) * overdubamp;
+                        recin1 += ((double)b[playhead * pchans]) * overdubamp;
                     
                     if (recordhead < 0) {
                         recordhead = playhead;
@@ -8509,7 +8807,7 @@ apnde:
                             writeval1 = writeval1 / pokesteps;
                             pokesteps = 1.0;
                         }
-                        b[recordhead * nchan] = writeval1;
+                        b[recordhead * pchans] = writeval1;
                         recplaydif = (double)(playhead - recordhead);     // linear-interp for speed > 1x
                         if (direction != directionorig)
                         {
@@ -8523,17 +8821,17 @@ apnde:
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead - 1); i >= 0; i--) {
                                             writeval1 -= coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                         for (i = maxhead; i > playhead; i--) {
                                             writeval1 -= coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead + 1); i < playhead; i++) {
                                             writeval1 += coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     }
                                 } else {
@@ -8543,17 +8841,17 @@ apnde:
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead + 1); i < (maxhead + 1); i++) {
                                             writeval1 += coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                         for (i = 0; i < playhead; i++) {
                                             writeval1 += coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     }
                                 }
@@ -8566,17 +8864,17 @@ apnde:
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead - 1); i >= maxhead; i--) {
                                             writeval1 -= coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                         for (i = (frames - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead + 1); i < playhead; i++) {
                                             writeval1 += coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     }
                                 } else {
@@ -8586,17 +8884,17 @@ apnde:
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead + 1); i < frames; i++) {
                                             writeval1 += coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                         for (i = maxhead; i < playhead; i++) {
                                             writeval1 += coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     } else {
                                         coeff1 = (recin1 - writeval1) / recplaydif;
                                         for (i = (recordhead - 1); i > playhead; i--) {
                                             writeval1 -= coeff1;
-                                            b[i * nchan] = writeval1;
+                                            b[i * pchans] = writeval1;
                                         }
                                     }
                                 }
@@ -8607,13 +8905,13 @@ apnde:
                                 coeff1 = (recin1 - writeval1) / recplaydif;
                                 for (i = (recordhead + 1); i < playhead; i++) {
                                     writeval1 += coeff1;
-                                    b[i * nchan] = writeval1;
+                                    b[i * pchans] = writeval1;
                                 }
                             } else {
                                 coeff1 = (recin1 - writeval1) / recplaydif;
                                 for (i = (recordhead - 1); i > playhead; i--) {
                                     writeval1 -= coeff1;
-                                    b[i * nchan] = writeval1;
+                                    b[i * pchans] = writeval1;
                                 }
                             }
                         }
