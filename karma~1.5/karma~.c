@@ -1754,7 +1754,7 @@ void karma_record(t_karma *x)
             if (!go) {
                 init = 1;
                 if (buf) {
-                    nchans = x->nchans;     // !! address only useable
+                    nchans = x->nchans;     // !! address only useable  // !! bullshit ??
                     bframes = x->bframes;
                     b = buffer_locksamples(buf);
                     if (!b)
@@ -1796,100 +1796,13 @@ void karma_record(t_karma *x)
 zero:
     return;
 }
-/*
-void karma_record(t_karma *x)
-{
-    float *b;
-    long i;
-    char sc, sh;
-    t_bool g, recordinit, stopallowed;
-    t_ptr_int bchans, bframes;
-    
-    t_buffer_obj *buf = buffer_ref_getobject(x->buf);
 
-    recordinit = x->recordinit;
-    sc = x->statecontrol;
-    sh = x->statehuman;     // !! fix: overdub display !! *
-    g = 1;
-
-    stopallowed = x->stopallowed;
-    x->stopallowed = 1;
-
-    if (x->record) {
-        if (x->recordalt) {
-            sc = 2;
-            sh = 3;         // ?? *
-        } else {
-            sc = 3;
-            sh = 2;
-        }
-    } else {
-        if (x->append) {
-            if (x->go) {
-                if (x->recordalt) {
-                    sc = 2;
-                    sh = 3; // ?? *
-                } else {
-                    sc = 10;
-                    sh = 4;
-                }
-            } else {
-                sc = 1;
-                sh = 5;
-            }
-        } else {
-            if (!x->go) {
-                recordinit = 1;
-                if (buf) {
-                    bchans = x->bchans;
-                    bframes = x->bframes;
-                    b = buffer_locksamples(buf);
-                    if (!b)
-                        x->stopallowed = stopallowed;   // ??
-                        goto zero;
-
-                    for (i = 0; i < bframes; i++) {
-                        if (bchans > 1) {
-                            b[i * bchans] = 0.0;
-                            b[(i * bchans) + 1] = 0.0;
-                            if (bchans > 2) {
-                                b[(i * bchans) + 2] = 0.0;
-                                if (bchans > 3) {
-                                    b[(i * bchans) + 3] = 0.0;
-                                }
-                            }
-                        } else {
-                            b[i] = 0.0;
-                        }
-                    }
-                    
-                    buffer_setdirty(buf);
-                    buffer_unlocksamples(buf);
-                }
-                sc = 1;
-                sh = 5;
-            } else {
-                sc = 11;
-                sh = 2;
-            }
-        }
-    }
-    
-    x->statecontrol = sc;
-    x->recordinit = recordinit;
-    x->go = g;
-    x->statehuman = sh;
-
-zero:
-    return;
-}
-*/
 void karma_append(t_karma *x)
 {
     if (x->recordinit) {
         if ((!x->append) && (!x->looprecord)) {
             x->append = 1;
-            x->maxloop = x->bframes - 1;
+            x->maxloop = (x->bframes - 1) * x->nchans;  // !! ??
             x->statecontrol = 9;
             x->statehuman = 4;  // ??
             x->stopallowed = 1;
