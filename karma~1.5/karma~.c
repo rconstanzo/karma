@@ -934,7 +934,7 @@ void karma_buf_setup(t_karma *x, t_symbol *s)
         x->srscale                  = x->bsr / x->ssr;
         x->bvsnorm  = x->vsnorm * (x->bsr / (double)x->bframes);
         x->minloop  = x->startloop  = 0.0;
-        x->maxloop  = x->endloop    = (x->bframes - 1) * x->bchans;//x->nchans; // !!
+        x->maxloop  = x->endloop    = (x->bframes - 1) * x->nchans;//x->bchans; // !!
         x->selstart                 = 0.0;
         x->selection                = 1.0;
 
@@ -961,7 +961,7 @@ void karma_buf_modify(t_karma *x, t_buffer_obj *b)
             x->bchans                   = modchans;
             x->nchans   = (modchans < x->ochans) ? modchans : x->ochans;    // MIN
             x->minloop  = x->startloop  = 0.0;
-            x->maxloop  = x->endloop    = (x->bframes - 1) * x->bchans;//x->nchans; // !!
+            x->maxloop  = x->endloop    = (x->bframes - 1) * x->nchans;//x->bchans; // !!
             x->bvsnorm  = x->vsnorm * (modbsr / (double)modframes);
 
             karma_select_size(x, x->selection);
@@ -997,7 +997,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
         x->srscale  = x->bsr / x->ssr;
     }
 
-    bchanscnt   = x->bchans;//x->nchans; // !!
+    bchanscnt   = x->nchans;//x->bchans; // !!
     bframesm1   = (x->bframes - 1) * bchanscnt;
     bframesms   = (double)bframesm1 / x->bmsr;                  // buffersize in milliseconds
     bvsnorm     = x->vsnorm * (x->bsr / (double)x->bframes);    // vectorsize in (double) % 0..1 (phase) units of buffer~
@@ -1847,7 +1847,7 @@ void karma_append(t_karma *x)
     if (x->recordinit) {
         if ((!x->append) && (!x->looprecord)) {
             x->append = 1;
-            x->maxloop = (x->bframes - 1) * x->bchans;//x->nchans; // !!
+            x->maxloop = (x->bframes - 1) * x->nchans;//x->bchans; // !!
             x->statecontrol = 9;
             x->statehuman = 4;
             x->stopallowed = 1;
