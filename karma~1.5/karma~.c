@@ -933,7 +933,7 @@ void karma_buf_setup(t_karma *x, t_symbol *s)
         x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
         x->srscale                  = x->bsr / x->ssr;
         x->bvsnorm  = x->vsnorm * (x->bsr / (double)x->bframes);
-        x->minloop  = x->startloop  = 0.0;
+        x->minloop  = x->startloop  = 0.0 * x->nchans;//x->bchans; // !!;
         x->maxloop  = x->endloop    = (x->bframes - 1) * x->nchans;//x->bchans; // !!
         x->selstart                 = 0.0;
         x->selection                = 1.0;
@@ -960,7 +960,7 @@ void karma_buf_modify(t_karma *x, t_buffer_obj *b)
             x->bframes                  = modframes;
             x->bchans                   = modchans;
             x->nchans   = (modchans < x->ochans) ? modchans : x->ochans;    // MIN
-            x->minloop  = x->startloop  = 0.0;
+            x->minloop  = x->startloop  = 0.0 * x->nchans;//x->bchans; // !!;
             x->maxloop  = x->endloop    = (x->bframes - 1) * x->nchans;//x->bchans; // !!
             x->bvsnorm  = x->vsnorm * (modbsr / (double)modframes);
 
@@ -985,7 +985,6 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
     low = templow;
     high = temphigh;
 
-        //buf       = buffer_ref_getobject(x->buf);
     if (caller) {                                       // only if called from 'karma_buf_change_internal()'
         buf         = buffer_ref_getobject(x->buf);
 
@@ -1051,16 +1050,21 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
 
     // finally check for minimum loop-size ...
     if ( (high - low) < bvsnorm ) {
-        object_warn((t_object *) x, "loop size cannot be this small, minimum is vectorsize internally (currently using %.0f samples)", x->vs);
-        if ( (low - bvsnorm05) < 0. ) {
-            low = 0.;
-            high = bvsnorm;
-        } else if ( (high + bvsnorm05) > 1. ) {
-            high = 1.;
-            low = 1. - bvsnorm;
+        if ( (high - low) == 0. ) {
+            object_warn((t_object *) x, "loop size cannot be zero, ignoring set command");
+            return;
         } else {
-            low = low - bvsnorm05;
-            high = high + bvsnorm05;
+            object_warn((t_object *) x, "loop size cannot be this small, minimum is vectorsize internally (currently using %.0f samples)", x->vs);
+            if ( (low - bvsnorm05) < 0. ) {
+                low = 0.;
+                high = bvsnorm;
+            } else if ( (high + bvsnorm05) > 1. ) {
+                high = 1.;
+                low = 1. - bvsnorm;
+            } else {
+                low = low - bvsnorm05;
+                high = high + bvsnorm05;
+            }
         }
     }
     // regardless of input choice ('loop_points_flag'), final low/high system is normalised (& clipped) 0..1 (phase)
@@ -1072,7 +1076,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
     post("loop start normalised %.2f, loop end normalised %.2f, units %s", low, high, *loop_points_sym);
     //post("loop start samples %.2f, loop end samples %.2f, units used %s", (low * bframesm1), (high * bframesm1), *loop_points_sym);
 */
-    // to samples, and account for channels / buffer samplerate
+    // to samples, and account for channels & buffer samplerate
     x->minloop = x->startloop = low * bframesm1 * bchanscnt;
     x->maxloop = x->endloop = high * bframesm1 * bchanscnt;
 
@@ -1433,49 +1437,7 @@ void karma_setloop(t_karma *x, t_symbol *s, short ac, t_atom *av)   // " setloop
 //  defer(x, (method)karma_setloop_internal, s, ac, av);            // main method
     karma_setloop_internal(x, s, ac, av);
 }
-/*
-void karma_clock_list(t_karma *x)
-{
-    t_bool rlgtz = x->reportlist > 0;
-    
-    if (rlgtz)                                                  // ('reportlist 0' == off, else milliseconds)
-    {
-        t_ptr_int frames        = x->bframes - 1;
-        t_ptr_int minloop       = x->minloop;
-        t_ptr_int maxloop       = x->maxloop;
-        t_ptr_int setloopsize   = maxloop - minloop;
-        
-        t_bool directflag   = x->directionorig < 0;             // !! reverse = 1, forward = 0
-        t_bool record       = x->record;                        // pointless
-        t_bool go           = x->go;                            // pointless
-        
-        char statehuman     = x->statehuman;
-        
-        double bmsr         = x->bmsr;
-        double playhead     = x->playhead;
-        double selection    = x->selection;
-        double normalisedposition;
-                                                     //  ((playhead-(frames-maxloop))/setloopsize) : ((playhead-startloop)/setloopsize)  // ??
-        normalisedposition  = CLAMP( directflag ? ((playhead-(frames-setloopsize))/setloopsize) : ((playhead-minloop)/setloopsize), 0., 1. );
-        
-        t_atom datalist[7];                                     // !! reverse logics ??
-        atom_setfloat(  datalist + 0,    normalisedposition                     );                                  // position float normalised 0..1
-        atom_setlong(   datalist + 1,    go         );                                                              // play flag int
-        atom_setlong(   datalist + 2,    record     );  //                          ((minloop + 1) / bmsr) // ??    // record flag int
-        atom_setfloat(  datalist + 3, (  directflag ? ((frames - setloopsize) / bmsr) : ((minloop) / bmsr) )    );  // start float ms
-        atom_setfloat(  datalist + 4, (  directflag ? (frames / bmsr) : ((maxloop + 1) / bmsr) )                );  // end float ms
-        atom_setfloat(  datalist + 5, ( (selection * (setloopsize + 1)) / bmsr) );//    ((maxloop + 1) / bmsr)      // window float ms
-        atom_setlong(   datalist + 6,    statehuman );  // (selection * (setloopsize + 1))  // ??                   // state flag int
-        
-        outlet_list(x->messout, 0L, 7, datalist);
-//      outlet_list(x->messout, gensym("list"), 7, datalist);
-        
-        if (sys_getdspstate() && (rlgtz)) {                     // '&& (x->reportlist > 0)' ??
-            clock_delay(x->tclock, x->reportlist);
-        }
-    }
-}
-*/
+
 void karma_clock_list(t_karma *x)
 {
     t_bool rlgtz = x->reportlist > 0;
@@ -1499,22 +1461,22 @@ void karma_clock_list(t_karma *x)
         double normalisedposition;
         
         float reversestart  = (frames - setloopsize) / bmsr;
-        float forwardsstart = (minloop) / bmsr;
+        float forwardstart  = (minloop + 1) / bmsr; // ??       // this is always wrong... ...why ??
         float reverseend    = frames / bmsr;
-        float forwardsend   = (maxloop + 1) / bmsr;
-        float windowsize    = (selection * (setloopsize + 1)) / bmsr;
+        float forwardend    = (maxloop + 1) / bmsr;
+        float selectionsize = (selection * (setloopsize + 1)) / bmsr;
         
                                                     //  ((playhead-(frames-maxloop))/setloopsize) : ((playhead-startloop)/setloopsize)  // ??
         normalisedposition  = CLAMP( directflag ? ((playhead-(frames-setloopsize))/setloopsize) : ((playhead-minloop)/setloopsize), 0., 1. );
         
-        t_atom datalist[7];                         // !! reverse logics ??
-        atom_setfloat(  datalist + 0,   normalisedposition  );                              // position float normalised 0..1
-        atom_setlong(   datalist + 1,   go         );                                       // play flag int
-        atom_setlong(   datalist + 2,   record     );                                       // record flag int
-        atom_setfloat(  datalist + 3, ( directflag ? reversestart : forwardsstart   )   );  // start float ms
-        atom_setfloat(  datalist + 4, ( directflag ? reverseend : forwardsend       )   );  // end float ms
-        atom_setfloat(  datalist + 5, ( windowsize )        );                              // window float ms
-        atom_setlong(   datalist + 6,   statehuman );                                       // state flag int
+        t_atom datalist[7];                         // !! reverse logics are wrong !!
+        atom_setfloat(  datalist + 0,   normalisedposition  );                                  // position float normalised 0..1
+        atom_setlong(   datalist + 1,   go         );                                           // play flag int
+        atom_setlong(   datalist + 2,   record     );                                           // record flag int
+        atom_setfloat(  datalist + 3, ( directflag ? reversestart   :   forwardstart    )   );  // start float ms
+        atom_setfloat(  datalist + 4, ( directflag ? reverseend     :   forwardend      )   );  // end float ms
+        atom_setfloat(  datalist + 5, ( selectionsize   )   );                                  // window float ms
+        atom_setlong(   datalist + 6,   statehuman );                                           // state flag int
         
         outlet_list(x->messout, 0L, 7, datalist);
 //      outlet_list(x->messout, gensym("list"), 7, datalist);
