@@ -797,7 +797,7 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
     x = (t_karma *)object_alloc(karma_class);
     x->initskip = 0;
 
-    // !! TODO: argument checks !!
+    // should do better argument checks here
     if (attrstart && argv) {
         bufname = atom_getsym(argv + 0);
         // @arg 0 @name buffer_name @optional 0 @type symbol @digest Name of <o>buffer~</o> to be associated with the <o>karma~</o> instance
@@ -807,7 +807,8 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
         if (attrstart > 1) {
             chans = atom_getlong(argv + 1);
             if (attrstart > 2) {
-                object_error((t_object *)x, "rodrigo! third arg no longer used! use new @syncout attribute instead!");
+                //object_error((t_object *)x, "rodrigo! third arg no longer used! use new @syncout attribute instead!");
+                object_warn((t_object *)x, "too many arguments to karma~, ignoring additional crap");
             }
         }
 /*  } else {
@@ -847,11 +848,6 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
 /*      else
             object_error((t_object *)x, "requires an associated buffer~ declaration");
 */
-        //x->syncoutlet = syncoutlet;
-        // @arg 2 @name sync_outlet @optional 1 @type int @digest Create audio rate sync position outlet ?
-        // @description Default = <b>0 (off)</b> <br />
-        // If <b>on</b>, <o>karma~</o> will have an additional outlet, after the audio channel outlets,
-        // for sending an audio rate sync position outlet in the range <b>0..1</b> <br />
 
         x->ochans = chans;
         // @arg 1 @name num_chans @optional 1 @type int @digest Number of Audio channels
@@ -938,7 +934,7 @@ void karma_buf_setup(t_karma *x, t_symbol *s)
         x->srscale                  = x->bsr / x->ssr;
         x->bvsnorm  = x->vsnorm * (x->bsr / (double)x->bframes);
         x->minloop  = x->startloop  = 0.0;
-        x->maxloop  = x->endloop    = (x->bframes - 1) * x->nchans;//x->bchans; // !!
+        x->maxloop  = x->endloop    = (x->bframes - 1) * x->bchans;//x->nchans; // !!
         x->selstart                 = 0.0;
         x->selection                = 1.0;
 
@@ -965,7 +961,7 @@ void karma_buf_modify(t_karma *x, t_buffer_obj *b)
             x->bchans                   = modchans;
             x->nchans   = (modchans < x->ochans) ? modchans : x->ochans;    // MIN
             x->minloop  = x->startloop  = 0.0;
-            x->maxloop  = x->endloop    = (x->bframes - 1) * x->nchans;//x->bchans; // !!
+            x->maxloop  = x->endloop    = (x->bframes - 1) * x->bchans;//x->nchans; // !!
             x->bvsnorm  = x->vsnorm * (modbsr / (double)modframes);
 
             karma_select_size(x, x->selection);
@@ -1001,7 +997,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
         x->srscale  = x->bsr / x->ssr;
     }
 
-    bchanscnt   = x->nchans;//x->bchans; // !!
+    bchanscnt   = x->bchans;//x->nchans; // !!
     bframesm1   = (x->bframes - 1) * bchanscnt;
     bframesms   = (double)bframesm1 / x->bmsr;                  // buffersize in milliseconds
     bvsnorm     = x->vsnorm * (x->bsr / (double)x->bframes);    // vectorsize in (double) % 0..1 (phase) units of buffer~
@@ -1437,7 +1433,7 @@ void karma_setloop(t_karma *x, t_symbol *s, short ac, t_atom *av)   // " setloop
 //  defer(x, (method)karma_setloop_internal, s, ac, av);            // main method
     karma_setloop_internal(x, s, ac, av);
 }
-
+/*
 void karma_clock_list(t_karma *x)
 {
     t_bool rlgtz = x->reportlist > 0;
@@ -1450,8 +1446,8 @@ void karma_clock_list(t_karma *x)
         t_ptr_int setloopsize   = maxloop - minloop;
         
         t_bool directflag   = x->directionorig < 0;             // !! reverse = 1, forward = 0
-        t_bool record       = x->record;
-        t_bool go           = x->go;
+        t_bool record       = x->record;                        // pointless
+        t_bool go           = x->go;                            // pointless
         
         char statehuman     = x->statehuman;
         
@@ -1459,13 +1455,13 @@ void karma_clock_list(t_karma *x)
         double playhead     = x->playhead;
         double selection    = x->selection;
         double normalisedposition;
-                                                    //  ((playhead-(frames-maxloop))/setloopsize) : ((playhead-startloop)/setloopsize)  // ??
+                                                     //  ((playhead-(frames-maxloop))/setloopsize) : ((playhead-startloop)/setloopsize)  // ??
         normalisedposition  = CLAMP( directflag ? ((playhead-(frames-setloopsize))/setloopsize) : ((playhead-minloop)/setloopsize), 0., 1. );
         
         t_atom datalist[7];                                     // !! reverse logics ??
         atom_setfloat(  datalist + 0,    normalisedposition                     );                                  // position float normalised 0..1
-        atom_setlong(   datalist + 1,    go         );                                                              // play flag int    // pointless
-        atom_setlong(   datalist + 2,    record     );  //                          ((minloop + 1) / bmsr) // ??    // record flag int  // pointless
+        atom_setlong(   datalist + 1,    go         );                                                              // play flag int
+        atom_setlong(   datalist + 2,    record     );  //                          ((minloop + 1) / bmsr) // ??    // record flag int
         atom_setfloat(  datalist + 3, (  directflag ? ((frames - setloopsize) / bmsr) : ((minloop) / bmsr) )    );  // start float ms
         atom_setfloat(  datalist + 4, (  directflag ? (frames / bmsr) : ((maxloop + 1) / bmsr) )                );  // end float ms
         atom_setfloat(  datalist + 5, ( (selection * (setloopsize + 1)) / bmsr) );//    ((maxloop + 1) / bmsr)      // window float ms
@@ -1475,6 +1471,55 @@ void karma_clock_list(t_karma *x)
 //      outlet_list(x->messout, gensym("list"), 7, datalist);
         
         if (sys_getdspstate() && (rlgtz)) {                     // '&& (x->reportlist > 0)' ??
+            clock_delay(x->tclock, x->reportlist);
+        }
+    }
+}
+*/
+void karma_clock_list(t_karma *x)
+{
+    t_bool rlgtz = x->reportlist > 0;
+    
+    if (rlgtz)                                                  // ('reportlist 0' == off, else milliseconds)
+    {
+        t_ptr_int frames        = x->bframes - 1;
+        t_ptr_int minloop       = x->minloop;
+        t_ptr_int maxloop       = x->maxloop;
+        t_ptr_int setloopsize   = maxloop - minloop;
+        
+        t_bool directflag   = x->directionorig < 0;             // !! reverse = 1, forward = 0
+        t_bool record       = x->record;                        // pointless
+        t_bool go           = x->go;                            // pointless
+        
+        char statehuman     = x->statehuman;
+        
+        double bmsr         = x->bmsr;
+        double playhead     = x->playhead;
+        double selection    = x->selection;
+        double normalisedposition;
+        
+        float reversestart  = (frames - setloopsize) / bmsr;
+        float forwardsstart = (minloop) / bmsr;
+        float reverseend    = frames / bmsr;
+        float forwardsend   = (maxloop + 1) / bmsr;
+        float windowsize    = (selection * (setloopsize + 1)) / bmsr;
+        
+                                                    //  ((playhead-(frames-maxloop))/setloopsize) : ((playhead-startloop)/setloopsize)  // ??
+        normalisedposition  = CLAMP( directflag ? ((playhead-(frames-setloopsize))/setloopsize) : ((playhead-minloop)/setloopsize), 0., 1. );
+        
+        t_atom datalist[7];                         // !! reverse logics ??
+        atom_setfloat(  datalist + 0,   normalisedposition  );                              // position float normalised 0..1
+        atom_setlong(   datalist + 1,   go         );                                       // play flag int
+        atom_setlong(   datalist + 2,   record     );                                       // record flag int
+        atom_setfloat(  datalist + 3, ( directflag ? reversestart : forwardsstart   )   );  // start float ms
+        atom_setfloat(  datalist + 4, ( directflag ? reverseend : forwardsend       )   );  // end float ms
+        atom_setfloat(  datalist + 5, ( windowsize )        );                              // window float ms
+        atom_setlong(   datalist + 6,   statehuman );                                       // state flag int
+        
+        outlet_list(x->messout, 0L, 7, datalist);
+//      outlet_list(x->messout, gensym("list"), 7, datalist);
+        
+        if (sys_getdspstate() && (rlgtz)) {         // '&& (x->reportlist > 0)' ??
             clock_delay(x->tclock, x->reportlist);
         }
     }
@@ -1714,7 +1759,7 @@ void karma_record(t_karma *x)
     long i;
     char sc, sh;
     t_bool record, go, recalt, append, init;
-    t_ptr_int nchans, bframes;
+    t_ptr_int bchans, bframes;  // !! nchans ??
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
 
@@ -1754,20 +1799,20 @@ void karma_record(t_karma *x)
             if (!go) {
                 init = 1;
                 if (buf) {
-                    nchans = x->nchans;     // !! address only useable  // !! bullshit ??
+                    bchans = x->bchans;     // !! nchans ??
                     bframes = x->bframes;
                     b = buffer_locksamples(buf);
                     if (!b)
                         goto zero;
                     
                     for (i = 0; i < bframes; i++) {
-                        if (nchans > 1) {
-                            b[i * nchans] = 0.0;
-                            b[(i * nchans) + 1] = 0.0;
-                            if (nchans > 2) {
-                                b[(i * nchans) + 2] = 0.0;
-                                if (nchans > 3) {
-                                    b[(i * nchans) + 3] = 0.0;
+                        if (bchans > 1) {
+                            b[i * bchans] = 0.0;
+                            b[(i * bchans) + 1] = 0.0;
+                            if (bchans > 2) {
+                                b[(i * bchans) + 2] = 0.0;
+                                if (bchans > 3) {
+                                    b[(i * bchans) + 3] = 0.0;
                                 }
                             }
                         } else {
@@ -1802,9 +1847,9 @@ void karma_append(t_karma *x)
     if (x->recordinit) {
         if ((!x->append) && (!x->looprecord)) {
             x->append = 1;
-            x->maxloop = (x->bframes - 1) * x->nchans;  // !! ??
+            x->maxloop = (x->bframes - 1) * x->bchans;//x->nchans; // !!
             x->statecontrol = 9;
-            x->statehuman = 4;  // ??
+            x->statehuman = 4;
             x->stopallowed = 1;
         } else {
             object_error((t_object *)x, "can't append if already appending, or during 'initial-loop', or if buffer~ is full");
@@ -1872,9 +1917,10 @@ t_max_err karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, v
 */
 t_max_err karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, void *dat)
 {
-    t_symbol *bufnamecheck = (t_symbol *)object_method((t_object *)sndr, gensym("getname"));
+//  t_symbol *bufnamecheck = (t_symbol *)object_method((t_object *)sndr, gensym("getname"));
  
-    if (bufnamecheck == x->bufname) {   // check...
+//  if (bufnamecheck == x->bufname) {   // check...
+    if (buffer_ref_exists(x->buf)) {
         if (msg == ps_buffer_modified)
             x->buf_modified = true;     // set flag
         return  buffer_ref_notify(x->buf, s, msg, sndr, dat);   // ...return
@@ -1891,8 +1937,10 @@ void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long v
     x->clockgo  = 1;
     
     if (x->bufname != 0) {
-        if (!x->initinit)
-            karma_buf_setup(x, x->bufname);     // does 'x->bvsnorm'    // !! this should be defered ??
+//      if (buffer_ref_exists(x->buf)) {
+            if (!x->initinit)
+                karma_buf_setup(x, x->bufname); // does 'x->bvsnorm'    // !! this should be defered ??
+//      }
         if (x->ochans > 1) {
             if (x->ochans > 2) {
                 x->speedconnect = count[4];     // speed is 5th inlet
