@@ -132,7 +132,7 @@ typedef struct _karma {
     t_ptr_int   bframes;    // number of buffer frames (number of floats long the buffer is for a single channel)
     t_ptr_int   bchans;     // number of buffer channels (number of floats in a frame, stereo has 2 samples per frame, etc.)
     t_ptr_int   ochans;     // number of object audio channels (object arg #2: 1 / 2 / 4)
-    t_ptr_int   nchans;     // number of channels to actually address (use only channel one if 'ochans' == 1, etc.)
+//  t_ptr_int   nchans;     // number of channels to actually address (use only channel one if 'ochans' == 1, etc.)
 
     t_ptr_int   interpflag; // playback interpolation, 0 = linear, 1 = cubic, 2 = spline (!! why is this a t_ptr_int ??)
     t_ptr_int   recordhead; // record head position in samples
@@ -930,11 +930,11 @@ void karma_buf_setup(t_karma *x, t_symbol *s)
         x->bframes  = buffer_getframecount(buf);
         x->bmsr     = buffer_getmillisamplerate(buf);
         x->bsr      = buffer_getsamplerate(buf);
-        x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
+//      x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
         x->srscale                  = x->bsr / x->ssr;
         x->bvsnorm  = x->vsnorm * (x->bsr / (double)x->bframes);
-        x->minloop  = x->startloop  = 0.0 * x->nchans;//x->bchans; // !!;
-        x->maxloop  = x->endloop    = (x->bframes - 1) * x->nchans;//x->bchans; // !!
+        x->minloop  = x->startloop  = 0.0;// * x->bchans;//x->nchans; // !!;
+        x->maxloop  = x->endloop    = (x->bframes - 1);// * x->bchans;//x->nchans; // !!
         x->selstart                 = 0.0;
         x->selection                = 1.0;
 
@@ -959,16 +959,16 @@ void karma_buf_modify(t_karma *x, t_buffer_obj *b)
             x->srscale                  = modbsr / x->ssr;
             x->bframes                  = modframes;
             x->bchans                   = modchans;
-            x->nchans   = (modchans < x->ochans) ? modchans : x->ochans;    // MIN
-            x->minloop  = x->startloop  = 0.0 * x->nchans;//x->bchans; // !!;
-            x->maxloop  = x->endloop    = (x->bframes - 1) * x->nchans;//x->bchans; // !!
+//          x->nchans   = (modchans < x->ochans) ? modchans : x->ochans;    // MIN
+            x->minloop  = x->startloop  = 0.0;// * x->bchans;//x->nchans; // !!;
+            x->maxloop  = x->endloop    = (x->bframes - 1);// * x->bchans;//x->nchans; // !!
             x->bvsnorm  = x->vsnorm * (modbsr / (double)modframes);
 
             karma_select_size(x, x->selection);
             karma_select_start(x, x->selstart);
 //          karma_select_internal(x, x->selstart, x->selection);
             
-            post("buff modify called"); // dev
+//          post("buff modify called"); // dev
         }
     }
 }
@@ -979,7 +979,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
 {
 //  t_symbol *loop_points_sym = 0;                      // dev
     t_buffer_obj *buf;
-    t_ptr_int bchanscnt, bframesm1;
+    t_ptr_int bframesm1;//, bchanscnt;
     double bframesms, bvsnorm, bvsnorm05;               // !!
     double low, lowtemp, high, hightemp;
     low = templow;
@@ -992,12 +992,12 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
         x->bframes  = buffer_getframecount(buf);
         x->bmsr     = buffer_getmillisamplerate(buf);
         x->bsr      = buffer_getsamplerate(buf);
-        x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
+//      x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
         x->srscale  = x->bsr / x->ssr;
     }
 
-    bchanscnt   = x->nchans;//x->bchans; // !!
-    bframesm1   = (x->bframes - 1) * bchanscnt;
+//  bchanscnt   = x->bchans;//x->nchans; // !!
+    bframesm1   = (x->bframes - 1);// * bchanscnt;
     bframesms   = (double)bframesm1 / x->bmsr;                  // buffersize in milliseconds
     bvsnorm     = x->vsnorm * (x->bsr / (double)x->bframes);    // vectorsize in (double) % 0..1 (phase) units of buffer~
     bvsnorm05   = bvsnorm * 0.5;                                // half vectorsize (normalised)
@@ -1077,8 +1077,8 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
     //post("loop start samples %.2f, loop end samples %.2f, units used %s", (low * bframesm1), (high * bframesm1), *loop_points_sym);
 */
     // to samples, and account for channels & buffer samplerate
-    x->minloop = x->startloop = low * bframesm1 * bchanscnt;
-    x->maxloop = x->endloop = high * bframesm1 * bchanscnt;
+    x->minloop = x->startloop = low * bframesm1;// * bchanscnt;
+    x->maxloop = x->endloop = high * bframesm1;// * bchanscnt;
 
     // update selection
     karma_select_size(x, x->selection);
@@ -1501,16 +1501,16 @@ void karma_assist(t_karma *x, void *b, long m, long a, char *s)
             case 0:
                 if (dummy == 1) {
                     if (x->ochans == 1)
-                        sprintf(s, "(signal) Record Input / messages to karma~");
+                        strncpy_zero(s, "(signal) Record Input / messages to karma~", 256);
                     else
-                        sprintf(s, "(signal) Record Input 1 / messages to karma~");
+                        strncpy_zero(s, "(signal) Record Input 1 / messages to karma~", 256);
                 } else {
-                    sprintf(s, "(signal) Record Input %ld", dummy);
+                    snprintf_zero(s, 256, "(signal) Record Input %ld", dummy);
                     // @in 0 @type signal @digest Audio Inlet(s)... (object arg #2)
                 }
                 break;
             case 1:
-                sprintf(s, "(signal/float) Speed Factor (1. == normal speed)");
+                strncpy_zero(s, "(signal/float) Speed Factor (1. == normal speed)", 256);
                     // @in 1 @type signal_or_float @digest Speed Factor (1. = normal speed, < 1. = slower, > 1. = faster)
                 break;
             case 2:
@@ -1521,20 +1521,20 @@ void karma_assist(t_karma *x, void *b, long m, long a, char *s)
         {
             case 0:
                 if (x->ochans == 1)
-                    sprintf(s, "(signal) Audio Output");
+                    strncpy_zero(s, "(signal) Audio Output", 256);
                 else
-                    sprintf(s, "(signal) Audio Output %ld", dummy);
+                    snprintf_zero(s, 256, "(signal) Audio Output %ld", dummy);
                     // @out 0 @type signal @digest Audio Outlet(s)... (object arg #2)
                 break;
             case 1:
                 if (synclet)
-                    sprintf(s, "(signal) Sync Outlet (current position 0..1)");
+                    strncpy_zero(s, "(signal) Sync Outlet (current position 0..1)", 256);
                     // @out 1 @type signal @digest if chosen (@syncout 1) Sync Outlet (current position 0..1)
                 else
-                    sprintf(s, "List: current position (float 0..1) play state (int 0/1) record state (int 0/1) start position (float ms) end position (float ms) window size (float ms) current state (int 0=stop 1=play 2=record 3=overdub 4=append 5=initial)");
+                    strncpy_zero(s, "List: current position (float 0..1) play state (int 0/1) record state (int 0/1) start position (float ms) end position (float ms) window size (float ms) current state (int 0=stop 1=play 2=record 3=overdub 4=append 5=initial)", 512);
                 break;
             case 2:
-                sprintf(s, "List: current position (float 0..1) play state (int 0/1) record state (int 0/1) start position (float ms) end position (float ms) window size (float ms) current state (int 0=stop 1=play 2=record 3=overdub 4=append 5=initial)");
+                strncpy_zero(s, "List: current position (float 0..1) play state (int 0/1) record state (int 0/1) start position (float ms) end position (float ms) window size (float ms) current state (int 0=stop 1=play 2=record 3=overdub 4=append 5=initial)", 512);
                     // @out 2 @type list @digest Data Outlet (current position (float 0..1) play state (int 0/1) record state (int 0/1) start position (float ms) end position (float ms) window size (float ms) current state (int 0=stop 1=play 2=record 3=overdub 4=append 5=initial))
                 break;
         }
@@ -1809,7 +1809,7 @@ void karma_append(t_karma *x)
     if (x->recordinit) {
         if ((!x->append) && (!x->looprecord)) {
             x->append = 1;
-            x->maxloop = (x->bframes - 1) * x->nchans;//x->bchans; // !!
+            x->maxloop = (x->bframes - 1);// * x->bchans;//x->nchans; // !!
             x->statecontrol = 9;
             x->statehuman = 4;
             x->stopallowed = 1;
@@ -1882,7 +1882,7 @@ t_max_err karma_buf_notify(t_karma *x, t_symbol *s, t_symbol *msg, void *sndr, v
 //  t_symbol *bufnamecheck = (t_symbol *)object_method((t_object *)sndr, gensym("getname"));
  
 //  if (bufnamecheck == x->bufname) {   // check...
-    if (buffer_ref_exists(x->buf)) {
+    if (buffer_ref_exists(x->buf)) {    // this hack does not really work...
         if (msg == ps_buffer_modified)
             x->buf_modified = true;     // set flag
         return  buffer_ref_notify(x->buf, s, msg, sndr, dat);   // ...return
@@ -1899,7 +1899,7 @@ void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long v
     x->clockgo  = 1;
     
     if (x->bufname != 0) {
-//      if (buffer_ref_exists(x->buf)) {
+//      if (buffer_ref_exists(x->buf)) {        // this hack does not really work...
             if (!x->initinit)
                 karma_buf_setup(x, x->bufname); // does 'x->bvsnorm'    // !! this should be defered ??
 //      }
@@ -1907,16 +1907,16 @@ void karma_dsp64(t_karma *x, t_object *dsp64, short *count, double srate, long v
             if (x->ochans > 2) {
                 x->speedconnect = count[4];     // speed is 5th inlet
                 object_method(dsp64, gensym("dsp_add64"), x, karma_quad_perform, 0, NULL);
-                //post("karma~_64bit_v1.5_quad");
+                //post("karma~_v1.5_quad");
             } else {
                 x->speedconnect = count[2];     // speed is 3rd inlet
                 object_method(dsp64, gensym("dsp_add64"), x, karma_stereo_perform, 0, NULL);
-                //post("karma~_64bit_v1.5_stereo");
+                //post("karma~_v1.5_stereo");
             }
         } else {
             x->speedconnect = count[1];         // speed is 2nd inlet
             object_method(dsp64, gensym("dsp_add64"), x, karma_mono_perform, 0, NULL);
-            //post("karma~_64bit_v1.5_mono");
+            //post("karma~_v1.5_mono");
         }
         if (!x->initinit) {
             karma_select_size(x, 1.);
