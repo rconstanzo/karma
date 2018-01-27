@@ -182,7 +182,6 @@ typedef struct _karma {
 } t_karma;
 
 t_max_err   karma_syncout_set(t_karma *x, t_object *attr, long argc, t_atom *argv);
-//t_max_err karma_syncout_get(t_karma *x, t_object *attr, long *argc, t_atom **argv);
 
 void       *karma_new(t_symbol *s, short argc, t_atom *argv);
 void        karma_free(t_karma *x);
@@ -431,230 +430,6 @@ static inline void interp_index(t_ptr_int playhead, t_ptr_int *indx0, t_ptr_int 
     return;
 }
 
-/*
-static inline void calculate_head(char directionorig, double maxhead, t_ptr_int frames, t_ptr_int minloop, double selstart, double selection, char direction, double globalramp, float b, t_ptr_int pchans, t_bool record, t_bool jumpflag, double jumphead, t_ptr_int *maxloop, t_ptr_int *setloopsize, double *accuratehead, t_ptr_int *startloop, t_ptr_int *endloop, t_bool *wrapflag, t_ptr_int *recordhead, double *snrfade, t_bool *append, t_bool *recordalt, char *recendmark, t_bool *triginit, double *speedsrscaled, t_ptr_int *recordfade, char *recfadeflag)
-{
-    if (triginit)
-    {
-        if (recendmark)  // calculate end of loop
-        {
-            if (directionorig >= 0)
-            {
-                maxloop = CLAMP(maxhead, 4096, frames - 1);
-                setloopsize = maxloop - minloop;
-                accuratehead = startloop = minloop + (selstart * setloopsize);
-                endloop = startloop + (selection * setloopsize);
-                if (endloop > maxloop) {
-                    endloop = endloop - (setloopsize + 1);
-                    wrapflag = 1;
-                } else {
-                    wrapflag = 0;
-                }
-                if (direction < 0) {
-                    if (globalramp)
-                        ease_bufon(frames - 1, &b, pchans, accuratehead, recordhead, direction, globalramp);
-                }
-            } else {
-                maxloop = CLAMP((frames - 1) - maxhead, 4096, frames - 1);
-                setloopsize = maxloop - minloop;    // ((frames - 1) - setloopsize - minloop)   // ??
-                startloop = ((frames - 1) - setloopsize) + (selstart * setloopsize);    // ((frames - 1) - maxloop) + (selstart * maxloop);   // ??
-                accuratehead = endloop = startloop + (selection * setloopsize);         // startloop + (selection * maxloop);   ??
-                if (endloop > (frames - 1)) {
-                    endloop = ((frames - 1) - setloopsize) + (endloop - frames);
-                    wrapflag = 1;
-                } else {
-                    wrapflag = 0;
-                }
-                accuratehead = endloop;
-                if (direction > 0) {
-                    if (globalramp)
-                        ease_bufon(frames - 1, &b, pchans, accuratehead, recordhead, direction, globalramp);
-                }
-            }
-            if (globalramp)
-                ease_bufoff(frames - 1, &b, pchans, maxhead, -direction, globalramp);
-            recordhead = -1;
-            snrfade = 0.0;
-            triginit = 0;
-            append = recordalt = recendmark = 0;
-        } else {    // jump / play (inside 'window')
-            setloopsize = maxloop - minloop;
-            if (jumpflag)
-                accuratehead = (directionorig >= 0) ? ((jumphead * setloopsize) + minloop) : (((frames - 1) - maxloop) + (jumphead * setloopsize));
-            else
-                accuratehead = (direction < 0) ? endloop : startloop;
-            if (record) {
-                if (globalramp) {
-                    ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
-                    recordfade = 0;
-                }
-                recordhead = -1;
-                recfadeflag = 0;
-            }
-            snrfade = 0.0;
-            triginit = 0;
-        }
-    } else {        // jump-based constraints (outside 'window')
-        setloopsize = maxloop - minloop;
-        speedsrscaled = speed * srscale;
-        
-        if (record)
-            speedsrscaled = (fabs(speedsrscaled) > (setloopsize / 1024)) ? ((setloopsize / 1024) * direction) : speedsrscaled;
-        accuratehead = accuratehead + speedsrscaled;
-        
-        if (jumpflag)
-        {
-            if (wrapflag) {
-                if ((accuratehead < endloop) || (accuratehead > startloop))
-                    jumpflag = 0;
-            } else {
-                if ((accuratehead < endloop) && (accuratehead > startloop))
-                    jumpflag = 0;
-            }
-            if (directionorig >= 0)
-            {
-                if (accuratehead > maxloop)
-                {
-                    accuratehead = accuratehead - setloopsize;
-                    snrfade = 0.0;
-                    if (record) {
-                        if (globalramp) {
-                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
-                            recordfade = 0;
-                        }
-                        recfadeflag = 0;
-                        recordhead = -1;
-                    }
-                } else if (accuratehead < 0.0) {
-                    accuratehead = maxloop + accuratehead;
-                    snrfade = 0.0;
-                    if (record) {
-                        if (globalramp) {
-                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
-                            recordfade = 0;
-                        }
-                        recfadeflag = 0;
-                        recordhead = -1;
-                    }
-                }
-            } else {
-                if (accuratehead > (frames - 1))
-                {
-                    accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...((frames - 1) - maxloop)...   // ??
-                    snrfade = 0.0;
-                    if (record) {
-                        if (globalramp) {
-                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
-                            recordfade = 0;
-                        }
-                        recfadeflag = 0;
-                        recordhead = -1;
-                    }
-                } else if (accuratehead < ((frames - 1) - maxloop)) {
-                    accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...((frames - 1) - maxloop)... // ??
-                    snrfade = 0.0;
-                    if (record) {
-                        if (globalramp) {
-                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
-                            recordfade = 0;
-                        }
-                        recfadeflag = 0;
-                        recordhead = -1;
-                    }
-                }
-            }
-        } else {    // regular 'window' / 'position' constraints
-            if (wrapflag)
-            {
-                if ((accuratehead > endloop) && (accuratehead < startloop))
-                {
-                    accuratehead = (direction >= 0) ? startloop : endloop;
-                    snrfade = 0.0;
-                    if (record) {
-                        if (globalramp) {
-                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
-                            recordfade = 0;
-                        }
-                        recfadeflag = 0;
-                        recordhead = -1;
-                    }
-                } else if (directionorig >= 0) {
-                    if (accuratehead > maxloop)
-                    {
-                        accuratehead = accuratehead - setloopsize;  // fixed position ??
-                        snrfade = 0.0;
-                        if (record) {
-                            if (globalramp) {
-                                ease_bufoff(frames - 1, b, pchans, maxloop, -direction, globalramp);
-                                recordfade = 0;
-                            }
-                            recfadeflag = 0;
-                            recordhead = -1;
-                        }
-                    }
-                    else if (accuratehead < 0.0)
-                    {
-                        accuratehead = maxloop + setloopsize;       // !! this is surely completely wrong ??
-                        snrfade = 0.0;
-                        if (record) {
-                            if (globalramp) {
-                                ease_bufoff(frames - 1, b, pchans, minloop, -direction, globalramp);     // 0.0  // ??
-                                recordfade = 0;
-                            }
-                            recfadeflag = 0;
-                            recordhead = -1;
-                        }
-                    }
-                } else {    // reverse
-                    if (accuratehead < ((frames - 1) - maxloop))
-                    {
-                        accuratehead = (frames - 1) - (((frames - 1) - setloopsize) - accuratehead);    // ...- maxloop)... // ??
-                        snrfade = 0.0;
-                        if (record)
-                        {
-                            if (globalramp) {
-                                ease_bufoff(frames - 1, b, pchans, ((frames - 1) - maxloop), -direction, globalramp);
-                                recordfade = 0;
-                            }
-                            recfadeflag = 0;
-                            recordhead = -1;
-                        }
-                    } else if (accuratehead > (frames - 1)) {
-                        accuratehead = ((frames - 1) - setloopsize) + (accuratehead - (frames - 1));    // ...- maxloop)...   // ??
-                        snrfade = 0.0;
-                        if (record) {
-                            if (globalramp) {
-                                ease_bufoff(frames - 1, b, pchans, (frames - 1), -direction, globalramp);
-                                recordfade = 0;
-                            }
-                            recfadeflag = 0;
-                            recordhead = -1;
-                        }
-                    }
-                }
-            } else {    // (not wrapflag)
-                if ((accuratehead > endloop) || (accuratehead < startloop))
-                {
-                    accuratehead = (direction >= 0) ? startloop : endloop;
-                    snrfade = 0.0;
-                    if (record) {
-                        if (globalramp) {
-                            ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
-                            recordfade = 0;
-                        }
-                        recfadeflag = 0;
-                        recordhead = -1;
-                    }
-                }
-            }
-        }
-    }
-    
-    return;
-    
-}
-*/
-
 //  //  //
 
 void ext_main(void *r)
@@ -724,7 +499,7 @@ void ext_main(void *r)
 
     CLASS_ATTR_LONG(c, "syncout", 0, t_karma, syncoutlet);
     CLASS_ATTR_ACCESSORS(c, "syncout", (method)NULL, (method)karma_syncout_set);    // custom for using at instantiation
-    CLASS_ATTR_LABEL(c, "syncout", 0, "Create audio rate Sync Outlet no/yes 0/1");  // not needed ?
+    CLASS_ATTR_LABEL(c, "syncout", 0, "Create audio rate Sync Outlet no/yes 0/1");  // not needed anywhere ?
     CLASS_ATTR_INVISIBLE(c, "syncout", 0);                      // do not expose to user, only callable as instantiation attribute
     // @description Set as <m>integer</m> flag <b>0</b> or <b>1</b>. With <m>syncout</m> switched on, <o>karma~</o> will add an additional audio signal outlet to the object, after the audio outs and before the final data outlet. This outlet is an audio rate sync signal 0..1 for audio rate synchronous matching to other MSP processes. With <m>syncout</m> switched off (the default), <o>karma~</o> will have no additional outlets. This attribute cannot be sent to the object dynamically or changed in the inspector - it is only available at instantiation time. <br />
 
@@ -933,8 +708,8 @@ void karma_buf_setup(t_karma *x, t_symbol *s)
 //      x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
         x->srscale                  = x->bsr / x->ssr;
         x->bvsnorm  = x->vsnorm * (x->bsr / (double)x->bframes);
-        x->minloop  = x->startloop  = 0.0;// * x->bchans;//x->nchans; // !!;
-        x->maxloop  = x->endloop    = (x->bframes - 1);// * x->bchans;//x->nchans; // !!
+        x->minloop  = x->startloop  = 0.0;
+        x->maxloop  = x->endloop    = (x->bframes - 1);
         x->selstart                 = 0.0;
         x->selection                = 1.0;
 
@@ -960,8 +735,8 @@ void karma_buf_modify(t_karma *x, t_buffer_obj *b)
             x->bframes                  = modframes;
             x->bchans                   = modchans;
 //          x->nchans   = (modchans < x->ochans) ? modchans : x->ochans;    // MIN
-            x->minloop  = x->startloop  = 0.0;// * x->bchans;//x->nchans; // !!;
-            x->maxloop  = x->endloop    = (x->bframes - 1);// * x->bchans;//x->nchans; // !!
+            x->minloop  = x->startloop  = 0.0;
+            x->maxloop  = x->endloop    = (x->bframes - 1);
             x->bvsnorm  = x->vsnorm * (modbsr / (double)modframes);
 
             karma_select_size(x, x->selection);
@@ -996,8 +771,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
         x->srscale  = x->bsr / x->ssr;
     }
 
-//  bchanscnt   = x->bchans;//x->nchans; // !!
-    bframesm1   = (x->bframes - 1);// * bchanscnt;
+    bframesm1   = (x->bframes - 1);
     bframesms   = (double)bframesm1 / x->bmsr;                  // buffersize in milliseconds
     bvsnorm     = x->vsnorm * (x->bsr / (double)x->bframes);    // vectorsize in (double) % 0..1 (phase) units of buffer~
     bvsnorm05   = bvsnorm * 0.5;                                // half vectorsize (normalised)
@@ -1077,8 +851,8 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
     //post("loop start samples %.2f, loop end samples %.2f, units used %s", (low * bframesm1), (high * bframesm1), *loop_points_sym);
 */
     // to samples, and account for channels & buffer samplerate
-    x->minloop = x->startloop = low * bframesm1;// * bchanscnt;
-    x->maxloop = x->endloop = high * bframesm1;// * bchanscnt;
+    x->minloop = x->startloop = low * bframesm1;
+    x->maxloop = x->endloop = high * bframesm1;
 
     // update selection
     karma_select_size(x, x->selection);
@@ -1112,7 +886,6 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
         // !! this "buf_temp" assignment is to check for a valid buffer, so that karma~ playback...
         // ...continues with main assigned "buf" even if symbol given is in error !!
         // this is slow (& expensive ??) - there must be a better way ??
-        
         // use 'buffer_ref_exists()' instead ??
         
         x->bufname_temp = b_temp;
@@ -1159,7 +932,7 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
 
             // ... obviously pete is a bit confused about all this ...
             x->directionorig = 0;
-            x->maxhead = x->playhead;// = 0.0; // x->maxhead = x->playhead;    // ?? ('takeover')
+            x->maxhead = x->playhead;// = 0.0; // x->maxhead = x->playhead;    // ?? 'takeover' should be an option ??
             x->recordhead = -1;
 
             // maximum length message (4[6] atoms after 'set') = " set ...
@@ -1461,7 +1234,7 @@ void karma_clock_list(t_karma *x)
         double normalisedposition;
         
         float reversestart  = (frames - setloopsize) / bmsr;
-        float forwardstart  = (minloop + 1) / bmsr; // ??       // this is always wrong... ...why ??
+        float forwardstart  = (minloop + 1) / bmsr; // ??       // !! this is always wrong... ...why ?? // !! FIX !!
         float reverseend    = frames / bmsr;
         float forwardend    = (maxloop + 1) / bmsr;
         float selectionsize = (selection * (setloopsize + 1)) / bmsr;
@@ -1750,7 +1523,7 @@ void karma_record(t_karma *x)
                     sc = 2;
                     sh = 3; // ?? is this wrong?, it is not neccessarily overdub ??
                 } else {
-                    sc = 10;    // !! what is #10 (this is the only place it is set) ?!
+                    sc = 10;// !!
                     sh = 4;
                 }
             } else {
@@ -1788,7 +1561,7 @@ void karma_record(t_karma *x)
                 sc = 1;
                 sh = 5;
             } else {            // !! not 'record', not 'append', is 'go' ??
-                sc = 11;        // !! what is #11 (this is the only place it is set) ?!
+                sc = 11;        // !!
                 sh = 3;         // !! is this overdub ?!
             }
         }
@@ -1809,7 +1582,7 @@ void karma_append(t_karma *x)
     if (x->recordinit) {
         if ((!x->append) && (!x->looprecord)) {
             x->append = 1;
-            x->maxloop = (x->bframes - 1);// * x->bchans;//x->nchans; // !!
+            x->maxloop = (x->bframes - 1);
             x->statecontrol = 9;
             x->statehuman = 4;
             x->stopallowed = 1;
@@ -1823,7 +1596,7 @@ void karma_append(t_karma *x)
 
 void karma_overdub(t_karma *x, double amplitude)
 {
-    x->overdubamp = CLAMP(amplitude, 0.0, 1.0); // clamp overzealous ??
+    x->overdubamp = CLAMP(amplitude, 0.0, 1.0);
 }
 /*
 void karma_jump(t_karma *x, double jumpposition)
@@ -1834,7 +1607,7 @@ void karma_jump(t_karma *x, double jumpposition)
         } else {
             x->statecontrol = 8;
             x->jumphead = jumpposition;
-//          x->statehuman = 1;                  // NO ?? ...
+//          x->statehuman = 1;                  // ??
             x->stopallowed = 1;
         }
     }
@@ -1846,7 +1619,7 @@ void karma_jump(t_karma *x, double jumpposition)
         if ( !((x->looprecord)&&(!x->record)) ) {
             x->statecontrol = 8;
             x->jumphead = jumpposition;
-//          x->statehuman = 1;                  // no - 'jump' is whatever statehuman currently is (most likely 'play')
+//          x->statehuman = 1;                  // no - 'jump' is whatever 'statehuman' currently is (most likely 'play')
             x->stopallowed = 1;
         }
     }
@@ -2965,7 +2738,6 @@ apned:
     x->record           = record;
     x->recordprev       = recordprev;
     x->statecontrol     = statecontrol;
-    //x->statehuman     = statehuman;
     x->playfadeflag     = playfadeflag;
     x->recfadeflag      = recfadeflag;
     x->playfade         = playfade;
