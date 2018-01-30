@@ -132,7 +132,7 @@ typedef struct _karma {
     t_ptr_int   bframes;    // number of buffer frames (number of floats long the buffer is for a single channel)
     t_ptr_int   bchans;     // number of buffer channels (number of floats in a frame, stereo has 2 samples per frame, etc.)
     t_ptr_int   ochans;     // number of object audio channels (object arg #2: 1 / 2 / 4)
-//  t_ptr_int   nchans;     // number of channels to actually address (use only channel one if 'ochans' == 1, etc.)
+    t_ptr_int   nchans;     // number of channels to actually address (use only channel one if 'ochans' == 1, etc.)
 
     t_ptr_int   interpflag; // playback interpolation, 0 = linear, 1 = cubic, 2 = spline (!! why is this a t_ptr_int ??)
     t_ptr_int   recordhead; // record head position in samples
@@ -164,13 +164,13 @@ typedef struct _karma {
     t_bool  record;         // record flag
     t_bool  recordprev;     // previous record flag
     t_bool  looprecord;     // flag: "...for when object is in a recording stage that actually determines loop duration..."
-    t_bool  recordalt;      // ("rectoo") ARGH ?? !! flag that selects between different types of recording for statecontrol (but what?!) ??
+    t_bool  alternateflag;  // ("rectoo") ARGH ?? !! flag that selects between different types of engagement for statecontrol ??
     t_bool  append;         // append flag ??
     t_bool  triginit;       // flag to show trigger start of initial-loop creation (?)
     t_bool  wrapflag;       // flag to show if a window selection wraps around the buffer~ end / beginning
     t_bool  jumpflag;       // whether jump is 'on' or 'off' ("flag to block jumps from coming too soon" ??)
 
-    t_bool  recordinit;     // initial recording (raja: "...flag to determine whether to apply the 'record' message to initial loop recording or not")
+    t_bool  recordinit;     // initial record (raja: "...determine whether to apply the 'record' message to initial loop recording or not")
     t_bool  initinit;       // initial initialise (raja: "...hack i used to determine whether DSP is turned on for the very first time or not")
     t_bool  initskip;       // is initialising = 0
     t_bool  buf_modified;   // buffer has been modified bool
@@ -612,15 +612,19 @@ void *karma_new(t_symbol *s, short argc, t_atom *argv)
         x->vsnorm = x->vs / x->ssr;
         x->overdubprev = x->overdubamp = x->speedfloat = 1.0;
         x->islooped = x->snrtype = x->interpflag = 1;
-        x->playfadeflag = x->recfadeflag = x->recordinit = x->initinit = x->append = x->jumpflag = x->statecontrol = x->statehuman = x->stopallowed = 0;
-        x->directionprev = x->directionorig = x->recordprev = x->record = x->recordalt = x->recendmark = x->go = x->triginit = 0;
-        x->pokesteps = x->writeval1 = x->writeval2 = x->writeval3 = x->writeval4 = x->wrapflag = x->looprecord = 0;
+        x->playfadeflag = x->recfadeflag = x->recordinit = x->initinit = x->append = x->jumpflag = 0;
+        x->statecontrol = x->statehuman = x->stopallowed = 0;
+        x->go = x->triginit = 0;
+        x->directionprev = x->directionorig = x->recordprev = x->record = x->alternateflag = x->recendmark = 0;
+        x->pokesteps = x->wrapflag = x->looprecord = 0;
+        x->writeval1 = x->writeval2 = x->writeval3 = x->writeval4 = 0;
         x->maxhead = x->playhead = 0.0;
-        x->selstart = x->jumphead = x->snrfade = x->o1dif = x->o2dif = x->o3dif = x->o4dif = x->o1prev = x->o2prev = x->o3prev = x->o4prev = 0.0;
+        x->selstart = x->jumphead = x->snrfade = 0.0;
+        x->o1dif = x->o2dif = x->o3dif = x->o4dif = x->o1prev = x->o2prev = x->o3prev = x->o4prev = 0.0;
         
         if (bufname != 0)
-            x->bufname = bufname;   // !! setup is in 'karma_buf_setup()' called by 'karma_dsp64()'
-/*      else
+            x->bufname = bufname;   // !! setup is in 'karma_buf_setup()' called by 'karma_dsp64()'...
+/*      else                        // ...(this means double-clicking karma~ does not show buffer~ window until DSP turned on, ho hum)
             object_error((t_object *)x, "requires an associated buffer~ declaration");
 */
 
@@ -705,7 +709,7 @@ void karma_buf_setup(t_karma *x, t_symbol *s)
         x->bframes  = buffer_getframecount(buf);
         x->bmsr     = buffer_getmillisamplerate(buf);
         x->bsr      = buffer_getsamplerate(buf);
-//      x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
+        x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
         x->srscale                  = x->bsr / x->ssr;
         x->bvsnorm  = x->vsnorm * (x->bsr / (double)x->bframes);
         x->minloop  = x->startloop  = 0.0;
@@ -734,7 +738,7 @@ void karma_buf_modify(t_karma *x, t_buffer_obj *b)
             x->srscale                  = modbsr / x->ssr;
             x->bframes                  = modframes;
             x->bchans                   = modchans;
-//          x->nchans   = (modchans < x->ochans) ? modchans : x->ochans;    // MIN
+            x->nchans   = (modchans < x->ochans) ? modchans : x->ochans;    // MIN
             x->minloop  = x->startloop  = 0.0;
             x->maxloop  = x->endloop    = (x->bframes - 1);
             x->bvsnorm  = x->vsnorm * (modbsr / (double)modframes);
@@ -753,6 +757,7 @@ void karma_buf_modify(t_karma *x, t_buffer_obj *b)
 void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long loop_points_flag, t_bool caller)
 {
 //  t_symbol *loop_points_sym = 0;                      // dev
+    t_symbol *caller_sym = 0;
     t_buffer_obj *buf;
     t_ptr_int bframesm1;//, bchanscnt;
     double bframesms, bvsnorm, bvsnorm05;               // !!
@@ -767,8 +772,12 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
         x->bframes  = buffer_getframecount(buf);
         x->bmsr     = buffer_getmillisamplerate(buf);
         x->bsr      = buffer_getsamplerate(buf);
-//      x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
+        x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
         x->srscale  = x->bsr / x->ssr;
+        
+        caller_sym  = gensym("set");
+    } else {
+        caller_sym  = gensym("setloop");
     }
 
     bframesm1   = (x->bframes - 1);
@@ -825,7 +834,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
     // finally check for minimum loop-size ...
     if ( (high - low) < bvsnorm ) {
         if ( (high - low) == 0. ) {
-            object_warn((t_object *) x, "loop size cannot be zero, ignoring set command");
+            object_warn((t_object *) x, "loop size cannot be zero, ignoring %s command", caller_sym);
             return;
         } else {
             object_warn((t_object *) x, "loop size cannot be this small, minimum is vectorsize internally (currently using %.0f samples)", x->vs);
@@ -1223,9 +1232,9 @@ void karma_clock_list(t_karma *x)
         t_ptr_int setloopsize   = maxloop - minloop;
         
         t_bool directflag   = x->directionorig < 0;             // !! reverse = 1, forward = 0
-        t_bool record       = x->record;                        // pointless
-        t_bool go           = x->go;                            // pointless
-        
+        t_bool record       = x->record;                        // pointless (and actually is 'record' or 'overdub')
+        t_bool go           = x->go;                            // pointless (and actually this is on whenever transport is,...
+                                                                // ...not stricly just 'play')
         char statehuman     = x->statehuman;
         
         double bmsr         = x->bmsr;
@@ -1464,7 +1473,7 @@ void karma_stop(t_karma *x)
 {
     if (x->initinit) {
         if (x->stopallowed) {
-            x->statecontrol = x->recordalt ? 6 : 7;
+            x->statecontrol = x->alternateflag ? 6 : 7;
             x->append = 0;
             x->statehuman = 0;
             x->stopallowed = 0;
@@ -1476,9 +1485,9 @@ void karma_play(t_karma *x)
 {
     if ((!x->go) && (x->append)) {
         x->statecontrol = 9;
-        x->snrfade = 0.0;
+        x->snrfade = 0.0;   // !! should disable ??
     } else if ((x->record) || (x->append)) {
-        x->statecontrol = x->recordalt ? 4 : 3;
+        x->statecontrol = x->alternateflag ? 4 : 3;
     } else {
         x->statecontrol = 5;
     }
@@ -1493,14 +1502,14 @@ void karma_record(t_karma *x)
     float *b;
     long i;
     char sc, sh;
-    t_bool record, go, recalt, append, init;
-    t_ptr_int bchans, bframes;  // !! nchans ??
+    t_bool record, go, altflag, append, init;
+    t_ptr_int bframes, rchans;  // !! local 'rchans' = 'nchans' not 'bchans' !!
     
     t_buffer_obj *buf = buffer_ref_getobject(x->buf);
 
     record = x->record;
     go = x->go;
-    recalt = x->recordalt;
+    altflag = x->alternateflag;
     append = x->append;
     init = x->recordinit;
     sc = x->statecontrol;
@@ -1509,17 +1518,17 @@ void karma_record(t_karma *x)
     x->stopallowed = 1;
     
     if (record) {
-        if (recalt) {
+        if (altflag) {
             sc = 2;
             sh = 3;         // ?? is this wrong?, it is not neccessarily overdub ??
         } else {
             sc = 3;
-            sh = 2;
+            sh = (sh == 3) ? 1 : 2; // !! hack !! (but works !!)
         }
     } else {
         if (append) {
             if (go) {
-                if (recalt) {
+                if (altflag) {
                     sc = 2;
                     sh = 3; // ?? is this wrong?, it is not neccessarily overdub ??
                 } else {
@@ -1534,20 +1543,20 @@ void karma_record(t_karma *x)
             if (!go) {
                 init = 1;
                 if (buf) {
-                    bchans = x->bchans;     // !! nchans ??
-                    bframes = x->bframes;
+                    rchans = x->nchans;     // !! nchans not bchans = only record onto channel(s) currently used by karma~...
+                    bframes = x->bframes;   // ...(leave other channels in tact)
                     b = buffer_locksamples(buf);
                     if (!b)
                         goto zero;
                     
                     for (i = 0; i < bframes; i++) {
-                        if (bchans > 1) {
-                            b[i * bchans] = 0.0;
-                            b[(i * bchans) + 1] = 0.0;
-                            if (bchans > 2) {
-                                b[(i * bchans) + 2] = 0.0;
-                                if (bchans > 3) {
-                                    b[(i * bchans) + 3] = 0.0;
+                        if (rchans > 1) {
+                            b[i * rchans] = 0.0;
+                            b[(i * rchans) + 1] = 0.0;
+                            if (rchans > 2) {
+                                b[(i * rchans) + 2] = 0.0;
+                                if (rchans > 3) {
+                                    b[(i * rchans) + 3] = 0.0;
                                 }
                             }
                         } else {
@@ -1561,8 +1570,8 @@ void karma_record(t_karma *x)
                 sc = 1;
                 sh = 5;
             } else {            // !! not 'record', not 'append', is 'go' ??
-                sc = 11;        // !!
-                sh = 3;         // !! is this overdub ?!
+                sc = 11;        // !! ?? seems wrong
+                sh = 3;         // !! is this overdub ?? seems wrong
             }
         }
     }
@@ -1618,8 +1627,8 @@ void karma_jump(t_karma *x, double jumpposition)
     if (x->initinit) {
         if ( !((x->looprecord)&&(!x->record)) ) {
             x->statecontrol = 8;
-            x->jumphead = jumpposition;
-//          x->statehuman = 1;                  // no - 'jump' is whatever 'statehuman' currently is (most likely 'play')
+            x->jumphead = CLAMP(jumpposition, 0., 1.);  // for now phase only, TODO - ms & samples
+//          x->statehuman = 1;                          // no - 'jump' is whatever 'statehuman' currently is (most likely 'play')
             x->stopallowed = 1;
         }
     }
@@ -1722,13 +1731,13 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     double *out1  = outs[0];// mono out
     double *outPh = syncoutlet ? outs[1] : 0;   // sync (if @syncout 1)
 
-    int     n = vcount;
-    int     speedinlet  = x->speedconnect;
+    long    n = vcount;
+    short   speedinlet  = x->speedconnect;
     
     double accuratehead, maxhead, jumphead, srscale, speedsrscaled, recplaydif, pokesteps;
     double speed, speedfloat, osamp1, overdubamp, overdubprev, ovdbdif, selstart, selection;
     double o1prev, o1dif, frac, snrfade, globalramp, snrramp, writeval1, coeff1, recin1;
-    t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
+    t_bool go, record, recordprev, alternateflag, looprecord, jumpflag, append, dirt, wrapflag, triginit;
     char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
     t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, pchans, snrtype, interp;
     t_ptr_int frames, startloop, endloop, playhead, recordhead, minloop, maxloop, setloopsize;
@@ -1757,7 +1766,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     playfadeflag    = x->playfadeflag;
     recfadeflag     = x->recfadeflag;
     recordhead      = x->recordhead;
-    recordalt       = x->recordalt;
+    alternateflag   = x->alternateflag;
     pchans          = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
@@ -1796,35 +1805,35 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     {
         case 0:             // case 0: zero
             break;
-        case 1:             // case 1: record init
+        case 1:             // case 1: record initial loop
             record = go = triginit = looprecord = 1;
             recordfade = recfadeflag = playfade = playfadeflag = statecontrol = 0;
             break;
-        case 2:             // case 2: record recordalt (wtf is 'recordalt' ('rectoo') ?!)
+        case 2:             // case 2: record alternateflag (wtf is 'alternateflag' ('rectoo') ?!)  // in to OVERDUB ??
             recendmark = 3;
             record = recfadeflag = playfadeflag = 1;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 3:             // case 3: record off reg (wtf is 'reg' ?!)
+        case 3:             // case 3: record off regular
             recfadeflag = 1;
             playfadeflag = 3;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 4:             // case 4: play recordalt (wtf is 'recordalt' ('rectoo') ?!)
+        case 4:             // case 4: play alternateflag (wtf is 'alternateflag' ('rectoo') ?!)    // out of OVERDUB ??
             recendmark = 2;
             recfadeflag = playfadeflag = 1;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 5:             // case 5: play on reg (wtf is 'reg' ?!)
+        case 5:             // case 5: play on regular
             triginit = 1;
             statecontrol = 0;
             break;
-        case 6:             // case 6: stop recordalt (wtf is 'recordalt' ('rectoo') ?!)
+        case 6:             // case 6: stop alternateflag (wtf is 'alternateflag' ('rectoo') ?!)    // after OVERDUB ??
             playfade = recordfade = 0;
             recendmark = playfadeflag = recfadeflag = 1;
             statecontrol = 0;
             break;
-        case 7:             // case 7: stop reg (wtf is 'reg' ?!)
+        case 7:             // case 7: stop regular
             if (record) {
                 recordfade = 0;
                 recfadeflag = 1;
@@ -1843,16 +1852,16 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             statecontrol = 0;
             break;
         case 9:             // case 9: append
-            playfadeflag = 4;   // !!
-            playfade = 0;       // !!
+            playfadeflag = 4;   // !! modified in perform loop switch case(s) for playing behind append
+            playfade = 0;
             statecontrol = 0;
             break;
-        case 10:            // case 10: special case append (what is special about it ?!)
-            record = looprecord = recordalt = 1;
+        case 10:            // case 10: special case append (what is special about it ?!)   // in to RECORD / OVERDUB ??
+            record = looprecord = alternateflag = 1;
             snrfade = 0.0;
             recordfade = recfadeflag = statecontrol = 0;
             break;
-        case 11:            // case 11: record on reg (wtf is 'reg' ?!)
+        case 11:            // case 11: record on regular (when ?! not looped ?!)
             playfadeflag = 3;
             recfadeflag = 5;
             recordfade = playfade = statecontrol = 0;
@@ -1898,7 +1907,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             if (go)
             {
                 /*
-                calculate_head(directionorig, maxhead, frames, minloop, selstart, selection, direction, globalramp, &b, pchans, record, jumpflag, jumphead, &maxloop, &setloopsize, &accuratehead, &startloop, &endloop, &wrapflag, &recordhead, &snrfade, &append, &recordalt, &recendmark, &triginit, &speedsrscaled, &recordfade, &recfadeflag);
+                calculate_head(directionorig, maxhead, frames, minloop, selstart, selection, direction, globalramp, &b, pchans, record, jumpflag, jumphead, &maxloop, &setloopsize, &accuratehead, &startloop, &endloop, &wrapflag, &recordhead, &snrfade, &append, &alternateflag, &recendmark, &triginit, &speedsrscaled, &recordfade, &recfadeflag);
                 */
                 
                 if (triginit)
@@ -1943,7 +1952,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         recordhead = -1;
                         snrfade = 0.0;
                         triginit = 0;
-                        append = recordalt = recendmark = 0;
+                        append = alternateflag = recendmark = 0;
                     } else {    // jump / play (inside 'window')
                         setloopsize = maxloop - minloop;
                         if (jumpflag)
@@ -2163,19 +2172,20 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 case 0:
                                     break;
                                 case 1:
-                                    playfadeflag = go = 0;          // record recordalt   // play recordalt  // stop recordalt / reg
+                                    playfadeflag = go = 0;  // record alternateflag   // play alternateflag  // stop alternateflag / regular
                                     break;
                                 case 2:
                                     if (!record)
                                         triginit = jumpflag = 1;
-//                                  break;                          // !! no break - pass 2 -> 3 !!
-                                case 3:                             // jump // record off reg
+//                                  break;                  // !! no break - pass 2 -> 3 !!
+                                case 3:                     // jump // record off reg
                                     playfadeflag = playfade = 0;
                                     break;
-                                case 4:                             // append
+                                case 4:                     // append
                                     go = triginit = looprecord = 1;
+                                    // !! will disbling this enable play behind append ?? should this be dependent on passing previous maxloop ??
                                     snrfade = 0.0;
-                                    playfade = 0;   // !! !! originally zero, but then playback goes silent before empty portion of buffer !! !!
+                                    playfade = 0;           // !!
                                     playfadeflag = 0;
                                     break;
                             }
@@ -2198,8 +2208,9 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             break;
                         case 4:                                     // append
                             go = triginit = looprecord = 1;
+                            // !! will disbling this enable play behind append ?? should this be based on passing previous maxloop ??
                             snrfade = 0.0;
-                            playfade = 0;   // !! !! originally zero, but then playback goes silent before empty portion of buffer !! !!
+                            playfade = 0;   // !!
                             playfadeflag = 0;
                             break;
                     }
@@ -2333,7 +2344,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                 recordfade = 0;
                             }
-                            recordalt = 1;
+                            alternateflag = 1;
                             recfadeflag = 0;
                             recordhead = -1;
                         } else {
@@ -2344,7 +2355,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                         minloop = 0.0;                  // initial, but minloop should be set explicitly above ??
                         maxloop = frames - 1;
                         maxhead = accuratehead = (direction >= 0) ? minloop : maxloop;     // (direction >= 0) ? 0.0 : (frames - 1);   // ??
-                        recordalt = 1;
+                        alternateflag = 1;
                         recordhead = -1;
                         snrfade = 0.0;
                         triginit = 0;
@@ -2370,7 +2381,7 @@ apned:
                                 }
                             }
                             recendmark = triginit = 1;
-                            looprecord = recordalt = 0;
+                            looprecord = alternateflag = 0;
                             maxhead = frames - 1;
                         } else if (accuratehead < 0.0) {
                             accuratehead = frames - 1;
@@ -2383,7 +2394,7 @@ apned:
                                 }
                             }
                             recendmark = triginit = 1;
-                            looprecord = recordalt = 0;
+                            looprecord = alternateflag = 0;
                             maxhead = 0.0;
                         } else {                                    // <- track max write position
                             if ( ((directionorig >= 0) && (maxhead < accuratehead)) || ((directionorig < 0) && (maxhead > accuratehead)) )
@@ -2730,7 +2741,7 @@ apned:
     x->directionorig    = directionorig;
     x->directionprev    = directionprev;
     x->recordhead       = recordhead;
-    x->recordalt        = recordalt;
+    x->alternateflag    = alternateflag;
     x->recordfade       = recordfade;
     x->triginit         = triginit;
     x->jumpflag         = jumpflag;
@@ -2776,13 +2787,13 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     double *out2  = outs[1];    // R
     double *outPh = syncoutlet ? outs[2] : 0;   // sync (if @syncout 1)
     
-    int     n = vcount;
-    int     speedinlet  = x->speedconnect;
+    long    n = vcount;
+    short   speedinlet  = x->speedconnect;
     
     double accuratehead, maxhead, jumphead, srscale, speedsrscaled, recplaydif, pokesteps;
     double speed, speedfloat, osamp1, osamp2, overdubamp, overdubprev, ovdbdif, selstart, selection;
     double o1prev, o2prev, o1dif, o2dif, frac, snrfade, globalramp, snrramp, writeval1, writeval2, coeff1, coeff2, recin1, recin2;
-    t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
+    t_bool go, record, recordprev, alternateflag, looprecord, jumpflag, append, dirt, wrapflag, triginit;
     char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
     t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, pchans, snrtype, interp;
     t_ptr_int frames, startloop, endloop, playhead, recordhead, minloop, maxloop, setloopsize;
@@ -2814,7 +2825,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     playfadeflag    = x->playfadeflag;
     recfadeflag     = x->recfadeflag;
     recordhead      = x->recordhead;
-    recordalt       = x->recordalt;
+    alternateflag   = x->alternateflag;
     pchans          = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
@@ -2853,35 +2864,35 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
     {
         case 0:             // case 0: zero
             break;
-        case 1:             // case 1: record init
+        case 1:             // case 1: record initial loop
             record = go = triginit = looprecord = 1;
             recordfade = recfadeflag = playfade = playfadeflag = statecontrol = 0;
             break;
-        case 2:             // case 2: record recordalt (wtf is 'recordalt' ('rectoo') ?!)
+        case 2:             // case 2: record alternateflag (wtf is 'alternateflag' ('rectoo') ?!)  // in to OVERDUB ??
             recendmark = 3;
             record = recfadeflag = playfadeflag = 1;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 3:             // case 3: record off reg (wtf is 'reg' ?!)
+        case 3:             // case 3: record off regular
             recfadeflag = 1;
             playfadeflag = 3;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 4:             // case 4: play recordalt (wtf is 'recordalt' ('rectoo') ?!)
+        case 4:             // case 4: play alternateflag (wtf is 'alternateflag' ('rectoo') ?!)    // out of OVERDUB ??
             recendmark = 2;
             recfadeflag = playfadeflag = 1;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 5:             // case 5: play on reg (wtf is 'reg' ?!)
+        case 5:             // case 5: play on regular
             triginit = 1;
             statecontrol = 0;
             break;
-        case 6:             // case 6: stop recordalt (wtf is 'recordalt' ('rectoo') ?!)
+        case 6:             // case 6: stop alternateflag (wtf is 'alternateflag' ('rectoo') ?!)    // after OVERDUB ??
             playfade = recordfade = 0;
             recendmark = playfadeflag = recfadeflag = 1;
             statecontrol = 0;
             break;
-        case 7:             // case 7: stop reg (wtf is 'reg' ?!)
+        case 7:             // case 7: stop regular
             if (record) {
                 recordfade = 0;
                 recfadeflag = 1;
@@ -2900,16 +2911,16 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
             statecontrol = 0;
             break;
         case 9:             // case 9: append
-            playfadeflag = 4;   // !!
-            playfade = 0;       // !!
+            playfadeflag = 4;   // !! modified in perform loop switch case(s) for playing behind append
+            playfade = 0;
             statecontrol = 0;
             break;
-        case 10:            // case 10: special case append (what is special about it ?!)
-            record = looprecord = recordalt = 1;
+        case 10:            // case 10: special case append (what is special about it ?!)   // in to RECORD / OVERDUB ??
+            record = looprecord = alternateflag = 1;
             snrfade = 0.0;
             recordfade = recfadeflag = statecontrol = 0;
             break;
-        case 11:            // case 11: record on reg (wtf is 'reg' ?!)
+        case 11:            // case 11: record on regular (when ?! not looped ?!)
             playfadeflag = 3;
             recfadeflag = 5;
             recordfade = playfade = statecontrol = 0;
@@ -3000,7 +3011,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
-                            append = recordalt = recendmark = 0;
+                            append = alternateflag = recendmark = 0;
                         } else {    // jump / play (inside 'window')
                             setloopsize = maxloop - minloop;
                             if (jumpflag)
@@ -3226,17 +3237,18 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     case 0:
                                         break;
                                     case 1:
-                                        playfadeflag = go = 0;          // record recordalt   // play recordalt  // stop recordalt / reg
+                                        playfadeflag = go = 0;  // record alternateflag   // play alternateflag  // stop alternateflag / regular
                                         break;
                                     case 2:
                                         if (!record)
                                             triginit = jumpflag = 1;
-//                                      break;                          // !! no break - pass 2 -> 3 !!
-                                    case 3:                             // jump // record off reg
+//                                      break;                  // !! no break - pass 2 -> 3 !!
+                                    case 3:                     // jump // record off reg
                                         playfadeflag = playfade = 0;
                                         break;
-                                    case 4:                             // append
+                                    case 4:                     // append
                                         go = triginit = looprecord = 1;
+                                        // !! will disabling this enable play behind append ?? should this be based on passing previous maxloop ??
                                         snrfade = 0.0;
                                         playfade = playfadeflag = 0;
                                         break;
@@ -3260,6 +3272,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 break;
                             case 4:                                     // append
                                 go = triginit = looprecord = 1;
+                                // !! will disabling this enable play behind append ?? should this be based on passing previous maxloop ??
                                 snrfade = 0.0;
                                 playfade = playfadeflag = 0;
                                 break;
@@ -3409,7 +3422,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
-                                recordalt = 1;
+                                alternateflag = 1;
                                 recfadeflag = 0;
                                 recordhead = -1;
                             } else {
@@ -3419,7 +3432,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             directionorig = direction;
                             maxloop = frames - 1;
                             maxhead = accuratehead = (direction >= 0) ? 0.0 : (frames - 1);
-                            recordalt = 1;
+                            alternateflag = 1;
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
@@ -3444,7 +3457,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     }
                                 }
                                 recendmark = triginit = 1;
-                                looprecord = recordalt = 0;
+                                looprecord = alternateflag = 0;
                                 maxhead = frames - 1;
                             } else if (accuratehead < 0.0) {
                                 accuratehead = frames - 1;
@@ -3457,7 +3470,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     }
                                 }
                                 recendmark = triginit = 1;
-                                looprecord = recordalt = 0;
+                                looprecord = alternateflag = 0;
                                 maxhead = 0.0;
                             } else {                        // <- track max write position
                                 if ( ((directionorig >= 0) && (maxhead < accuratehead)) || ((directionorig < 0) && (maxhead > accuratehead)) )
@@ -3907,7 +3920,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
-                            append = recordalt = recendmark = 0;
+                            append = alternateflag = recendmark = 0;
                         } else {    // jump / play (inside 'window')
                             setloopsize = maxloop - minloop;
                             if (jumpflag)
@@ -4125,17 +4138,18 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     case 0:
                                         break;
                                     case 1:
-                                        playfadeflag = go = 0;          // record recordalt   // play recordalt  // stop recordalt / reg
+                                        playfadeflag = go = 0;  // record alternateflag   // play alternateflag  // stop alternateflag / regular
                                         break;
                                     case 2:
                                         if (!record)
                                             triginit = jumpflag = 1;
-//                                      break;                          // !! no break - pass 2 -> 3 !!
-                                    case 3:                             // jump // record off reg
+//                                      break;                  // !! no break - pass 2 -> 3 !!
+                                    case 3:                     // jump // record off reg
                                         playfadeflag = playfade = 0;
                                         break;
-                                    case 4:                             // append
+                                    case 4:                     // append
                                         go = triginit = looprecord = 1;
+                                        // !! will disabling this enable play behind append ?? should this be based on passing previous maxloop ??
                                         snrfade = 0.0;
                                         playfade = playfadeflag = 0;
                                         break;
@@ -4159,6 +4173,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                 break;
                             case 4:                                     // append
                                 go = triginit = looprecord = 1;
+                                // !! will disabling this enable play behind append ?? should this be based on passing previous maxloop ??
                                 snrfade = 0.0;
                                 playfade = playfadeflag = 0;
                                 break;
@@ -4295,7 +4310,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                                     ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
-                                recordalt = 1;
+                                alternateflag = 1;
                                 recfadeflag = 0;
                                 recordhead = -1;
                             } else {
@@ -4305,7 +4320,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                             directionorig = direction;
                             maxloop = frames - 1;
                             maxhead = accuratehead = (direction >= 0) ? 0.0 : (frames - 1);
-                            recordalt = 1;
+                            alternateflag = 1;
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
@@ -4330,7 +4345,7 @@ apnde:
                                     }
                                 }
                                 recendmark = triginit = 1;
-                                looprecord = recordalt = 0;
+                                looprecord = alternateflag = 0;
                                 maxhead = frames - 1;
                             } else if (accuratehead < 0.0) {
                                 accuratehead = frames - 1;
@@ -4343,7 +4358,7 @@ apnde:
                                     }
                                 }
                                 recendmark = triginit = 1;
-                                looprecord = recordalt = 0;
+                                looprecord = alternateflag = 0;
                                 maxhead = 0.0;
                             } else {                        // <- track max write position
                                 if ( ((directionorig >= 0) && (maxhead < accuratehead)) || ((directionorig < 0) && (maxhead > accuratehead)) )
@@ -4698,7 +4713,7 @@ apnde:
     x->directionorig    = directionorig;
     x->directionprev    = directionprev;
     x->recordhead       = recordhead;
-    x->recordalt        = recordalt;
+    x->alternateflag    = alternateflag;
     x->recordfade       = recordfade;
     x->triginit         = triginit;
     x->jumpflag         = jumpflag;
@@ -4749,14 +4764,14 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     double *out4  = outs[3];// channel 4
     double *outPh = syncoutlet ? outs[4] : 0;   // sync (if @syncout 1)
     
-    int     n = vcount;
-    int     speedinlet  = x->speedconnect;
+    long    n = vcount;
+    short   speedinlet  = x->speedconnect;
     
     double accuratehead, maxhead, jumphead, srscale, speedsrscaled, recplaydif, pokesteps;
     double speed, speedfloat, osamp1, osamp2, osamp3, osamp4, overdubamp, overdubprev, ovdbdif, selstart, selection;
     double o1prev, o2prev, o1dif, o2dif, o3prev, o4prev, o3dif, o4dif, frac, snrfade, globalramp, snrramp;
     double writeval1, writeval2, writeval3, writeval4, coeff1, coeff2, coeff3, coeff4, recin1, recin2, recin3, recin4;
-    t_bool go, record, recordprev, recordalt, looprecord, jumpflag, append, dirt, wrapflag, triginit;
+    t_bool go, record, recordprev, alternateflag, looprecord, jumpflag, append, dirt, wrapflag, triginit;
     char direction, directionprev, directionorig, statecontrol, playfadeflag, recfadeflag, recendmark;
     t_ptr_int playfade, recordfade, i, interp0, interp1, interp2, interp3, pchans, snrtype, interp;
     t_ptr_int frames, startloop, endloop, playhead, recordhead, minloop, maxloop, setloopsize;
@@ -4794,7 +4809,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     playfadeflag    = x->playfadeflag;
     recfadeflag     = x->recfadeflag;
     recordhead      = x->recordhead;
-    recordalt       = x->recordalt;
+    alternateflag   = x->alternateflag;
     pchans          = x->bchans;
     srscale         = x->srscale;
     frames          = x->bframes;
@@ -4833,35 +4848,35 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
     {
         case 0:             // case 0: zero
             break;
-        case 1:             // case 1: record init
+        case 1:             // case 1: record initial loop
             record = go = triginit = looprecord = 1;
             recordfade = recfadeflag = playfade = playfadeflag = statecontrol = 0;
             break;
-        case 2:             // case 2: record recordalt (wtf is 'recordalt' ('rectoo') ?!)
+        case 2:             // case 2: record alternateflag (wtf is 'alternateflag' ('rectoo') ?!)  // in to OVERDUB ??
             recendmark = 3;
             record = recfadeflag = playfadeflag = 1;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 3:             // case 3: record off reg (wtf is 'reg' ?!)
+        case 3:             // case 3: record off regular
             recfadeflag = 1;
             playfadeflag = 3;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 4:             // case 4: play recordalt (wtf is 'recordalt' ('rectoo') ?!)
+        case 4:             // case 4: play alternateflag (wtf is 'alternateflag' ('rectoo') ?!)    // out of OVERDUB ??
             recendmark = 2;
             recfadeflag = playfadeflag = 1;
             playfade = recordfade = statecontrol = 0;
             break;
-        case 5:             // case 5: play on reg (wtf is 'reg' ?!)
+        case 5:             // case 5: play on regular
             triginit = 1;
             statecontrol = 0;
             break;
-        case 6:             // case 6: stop recordalt (wtf is 'recordalt' ('rectoo') ?!)
+        case 6:             // case 6: stop alternateflag (wtf is 'alternateflag' ('rectoo') ?!)    // after OVERDUB ??
             playfade = recordfade = 0;
             recendmark = playfadeflag = recfadeflag = 1;
             statecontrol = 0;
             break;
-        case 7:             // case 7: stop reg (wtf is 'reg' ?!)
+        case 7:             // case 7: stop regular
             if (record) {
                 recordfade = 0;
                 recfadeflag = 1;
@@ -4880,16 +4895,16 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             statecontrol = 0;
             break;
         case 9:             // case 9: append
-            playfadeflag = 4;   // !!
-            playfade = 0;       // !!
+            playfadeflag = 4;   // !! modified in perform loop switch case(s) for playing behind append
+            playfade = 0;
             statecontrol = 0;
             break;
-        case 10:            // case 10: special case append (what is special about it ?!)
-            record = looprecord = recordalt = 1;
+        case 10:            // case 10: special case append (what is special about it ?!)   // in to RECORD / OVERDUB ??
+            record = looprecord = alternateflag = 1;
             snrfade = 0.0;
             recordfade = recfadeflag = statecontrol = 0;
             break;
-        case 11:            // case 11: record on reg (wtf is 'reg' ?!)
+        case 11:            // case 11: record on regular (when ?! not looped ?!)
             playfadeflag = 3;
             recfadeflag = 5;
             recordfade = playfade = statecontrol = 0;
@@ -4982,7 +4997,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
-                            append = recordalt = recendmark = 0;
+                            append = alternateflag = recendmark = 0;
                         } else {    // jump / play (inside 'window')
                             setloopsize = maxloop - minloop;
                             if (jumpflag)
@@ -5222,17 +5237,18 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     case 0:
                                         break;
                                     case 1:
-                                        playfadeflag = go = 0;          // record recordalt   // play recordalt  // stop recordalt / reg
+                                        playfadeflag = go = 0;  // record alternateflag   // play alternateflag  // stop alternateflag / regular
                                         break;
                                     case 2:
                                         if (!record)
                                             triginit = jumpflag = 1;
-//                                      break;                          // !! no break - pass 2 -> 3 !!
-                                    case 3:                             // jump // record off reg
+//                                      break;                  // !! no break - pass 2 -> 3 !!
+                                    case 3:                     // jump // record off reg
                                         playfadeflag = playfade = 0;
                                         break;
-                                    case 4:                             // append
+                                    case 4:                     // append
                                         go = triginit = looprecord = 1;
+                                        // !! will disabling this enable play behind append ?? should this be based on passing previous maxloop ??
                                         snrfade = 0.0;
                                         playfade = playfadeflag = 0;
                                         break;
@@ -5256,6 +5272,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 break;
                             case 4:                                     // append
                                 go = triginit = looprecord = 1;
+                                // !! will disabling this enable play behind append ?? should this be based on passing previous maxloop ??
                                 snrfade = 0.0;
                                 playfade = playfadeflag = 0;
                                 break;
@@ -5435,7 +5452,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
-                                recordalt = 1;
+                                alternateflag = 1;
                                 recfadeflag = 0;
                                 recordhead = -1;
                             } else {
@@ -5445,7 +5462,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             directionorig = direction;
                             maxloop = frames - 1;
                             maxhead = accuratehead = (direction >= 0) ? 0.0 : (frames - 1);
-                            recordalt = 1;
+                            alternateflag = 1;
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
@@ -5470,7 +5487,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     }
                                 }
                                 recendmark = triginit = 1;
-                                looprecord = recordalt = 0;
+                                looprecord = alternateflag = 0;
                                 maxhead = frames - 1;
                             } else if (accuratehead < 0.0) {
                                 accuratehead = frames - 1;
@@ -5483,7 +5500,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     }
                                 }
                                 recendmark = triginit = 1;
-                                looprecord = recordalt = 0;
+                                looprecord = alternateflag = 0;
                                 maxhead = 0.0;
                             } else {                        // <- track max write position
                                 if ( ((directionorig >= 0) && (maxhead < accuratehead)) || ((directionorig < 0) && (maxhead > accuratehead)) )
@@ -6029,7 +6046,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
-                            append = recordalt = recendmark = 0;
+                            append = alternateflag = recendmark = 0;
                         } else {    // jump / play (inside 'window')
                             setloopsize = maxloop - minloop;
                             if (jumpflag)
@@ -6262,17 +6279,18 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     case 0:
                                         break;
                                     case 1:
-                                        playfadeflag = go = 0;          // record recordalt   // play recordalt  // stop recordalt / reg
+                                        playfadeflag = go = 0;  // record alternateflag   // play alternateflag  // stop alternateflag / regular
                                         break;
                                     case 2:
                                         if (!record)
                                             triginit = jumpflag = 1;
-//                                      break;                          // !! no break - pass 2 -> 3 !!
-                                    case 3:                             // jump // record off reg
+//                                      break;                  // !! no break - pass 2 -> 3 !!
+                                    case 3:                     // jump // record off reg
                                         playfadeflag = playfade = 0;
                                         break;
-                                    case 4:                             // append
+                                    case 4:                     // append
                                         go = triginit = looprecord = 1;
+                                        // !! will disabling this enable play behind append ?? should this be based on passing previous maxloop ??
                                         snrfade = 0.0;
                                         playfade = playfadeflag = 0;
                                         break;
@@ -6296,6 +6314,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                 break;
                             case 4:                                     // append
                                 go = triginit = looprecord = 1;
+                                // !! will disabling this enable play behind append ?? should this be based on passing previous maxloop ??
                                 snrfade = 0.0;
                                 playfade = playfadeflag = 0;
                                 break;
@@ -6462,7 +6481,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                                     ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
-                                recordalt = 1;
+                                alternateflag = 1;
                                 recfadeflag = 0;
                                 recordhead = -1;
                             } else {
@@ -6472,7 +6491,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                             directionorig = direction;
                             maxloop = frames - 1;
                             maxhead = accuratehead = (direction >= 0) ? 0.0 : (frames - 1);
-                            recordalt = 1;
+                            alternateflag = 1;
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
@@ -6497,7 +6516,7 @@ apden:
                                     }
                                 }
                                 recendmark = triginit = 1;
-                                looprecord = recordalt = 0;
+                                looprecord = alternateflag = 0;
                                 maxhead = frames - 1;
                             } else if (accuratehead < 0.0) {
                                 accuratehead = frames - 1;
@@ -6510,7 +6529,7 @@ apden:
                                     }
                                 }
                                 recendmark = triginit = 1;
-                                looprecord = recordalt = 0;
+                                looprecord = alternateflag = 0;
                                 maxhead = 0.0;
                             } else {                        // <- track max write position
                                 if ( ((directionorig >= 0) && (maxhead < accuratehead)) || ((directionorig < 0) && (maxhead > accuratehead)) )
@@ -7010,7 +7029,7 @@ apden:
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
-                            append = recordalt = recendmark = 0;
+                            append = alternateflag = recendmark = 0;
                         } else {    // jump / play (inside 'window')
                             setloopsize = maxloop - minloop;
                             if (jumpflag)
@@ -7236,17 +7255,18 @@ apden:
                                     case 0:
                                         break;
                                     case 1:
-                                        playfadeflag = go = 0;          // record recordalt   // play recordalt  // stop recordalt / reg
+                                        playfadeflag = go = 0;  // record alternateflag   // play alternateflag  // stop alternateflag / regular
                                         break;
                                     case 2:
                                         if (!record)
                                             triginit = jumpflag = 1;
-//                                      break;                          // !! no break - pass 2 -> 3 !!
-                                    case 3:                             // jump // record off reg
+//                                      break;                  // !! no break - pass 2 -> 3 !!
+                                    case 3:                     // jump // record off reg
                                         playfadeflag = playfade = 0;
                                         break;
-                                    case 4:                             // append
+                                    case 4:                     // append
                                         go = triginit = looprecord = 1;
+                                        // !! will disabling this enable play behind append ?? should this be based on passing previous maxloop ??
                                         snrfade = 0.0;
                                         playfade = playfadeflag = 0;
                                         break;
@@ -7270,6 +7290,7 @@ apden:
                                 break;
                             case 4:                                     // append
                                 go = triginit = looprecord = 1;
+                                // !! will disabling this enable play behind append ?? should this be based on passing previous maxloop ??
                                 snrfade = 0.0;
                                 playfade = playfadeflag = 0;
                                 break;
@@ -7423,7 +7444,7 @@ apden:
                                     ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
-                                recordalt = 1;
+                                alternateflag = 1;
                                 recfadeflag = 0;
                                 recordhead = -1;
                             } else {
@@ -7433,7 +7454,7 @@ apden:
                             directionorig = direction;
                             maxloop = frames - 1;
                             maxhead = accuratehead = (direction >= 0) ? 0.0 : (frames - 1);
-                            recordalt = 1;
+                            alternateflag = 1;
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
@@ -7458,7 +7479,7 @@ apdne:
                                     }
                                 }
                                 recendmark = triginit = 1;
-                                looprecord = recordalt = 0;
+                                looprecord = alternateflag = 0;
                                 maxhead = frames - 1;
                             } else if (accuratehead < 0.0) {
                                 accuratehead = frames - 1;
@@ -7471,7 +7492,7 @@ apdne:
                                     }
                                 }
                                 recendmark = triginit = 1;
-                                looprecord = recordalt = 0;
+                                looprecord = alternateflag = 0;
                                 maxhead = 0.0;
                             } else {                        // <- track max write position
                                 if ( ((directionorig >= 0) && (maxhead < accuratehead)) || ((directionorig < 0) && (maxhead > accuratehead)) )
@@ -7927,7 +7948,7 @@ apdne:
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
-                            append = recordalt = recendmark = 0;
+                            append = alternateflag = recendmark = 0;
                         } else {    // jump / play (inside 'window')
                             setloopsize = maxloop - minloop;
                             if (jumpflag)
@@ -8145,17 +8166,18 @@ apdne:
                                     case 0:
                                         break;
                                     case 1:
-                                        playfadeflag = go = 0;          // record recordalt   // play recordalt  // stop recordalt / reg
+                                        playfadeflag = go = 0;  // record alternateflag   // play alternateflag  // stop alternateflag / regular
                                         break;
                                     case 2:
                                         if (!record)
                                             triginit = jumpflag = 1;
-//                                      break;                          // !! no break - pass 2 -> 3 !!
-                                    case 3:                             // jump // record off reg
+//                                      break;                  // !! no break - pass 2 -> 3 !!
+                                    case 3:                     // jump // record off reg
                                         playfadeflag = playfade = 0;
                                         break;
-                                    case 4:                             // append
+                                    case 4:                     // append
                                         go = triginit = looprecord = 1;
+                                        // !! will disabling this enable play behind append ?? should this be based on passing previous maxloop ??
                                         snrfade = 0.0;
                                         playfade = playfadeflag = 0;
                                         break;
@@ -8179,6 +8201,7 @@ apdne:
                                 break;
                             case 4:                                     // append
                                 go = triginit = looprecord = 1;
+                                // !! will disabling this enable play behind append ?? should this be based on passing previous maxloop ??
                                 snrfade = 0.0;
                                 playfade = playfadeflag = 0;
                                 break;
@@ -8319,7 +8342,7 @@ apdne:
                                     ease_bufon(frames - 1, b, pchans, accuratehead, recordhead, direction, globalramp);
                                     recordfade = 0;
                                 }
-                                recordalt = 1;
+                                alternateflag = 1;
                                 recfadeflag = 0;
                                 recordhead = -1;
                             } else {
@@ -8329,7 +8352,7 @@ apdne:
                             directionorig = direction;
                             maxloop = frames - 1;
                             maxhead = accuratehead = (direction >= 0) ? 0.0 : (frames - 1);
-                            recordalt = 1;
+                            alternateflag = 1;
                             recordhead = -1;
                             snrfade = 0.0;
                             triginit = 0;
@@ -8354,7 +8377,7 @@ apnde:
                                     }
                                 }
                                 recendmark = triginit = 1;
-                                looprecord = recordalt = 0;
+                                looprecord = alternateflag = 0;
                                 maxhead = frames - 1;
                             } else if (accuratehead < 0.0) {
                                 accuratehead = frames - 1;
@@ -8367,7 +8390,7 @@ apnde:
                                     }
                                 }
                                 recendmark = triginit = 1;
-                                looprecord = recordalt = 0;
+                                looprecord = alternateflag = 0;
                                 maxhead = 0.0;
                             } else {                        // <- track max write position
                                 if ( ((directionorig >= 0) && (maxhead < accuratehead)) || ((directionorig < 0) && (maxhead > accuratehead)) )
@@ -8734,7 +8757,7 @@ apnde:
     x->directionorig    = directionorig;
     x->directionprev    = directionprev;
     x->recordhead       = recordhead;
-    x->recordalt        = recordalt;
+    x->alternateflag    = alternateflag;
     x->recordfade       = recordfade;
     x->triginit         = triginit;
     x->jumpflag         = jumpflag;
