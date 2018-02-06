@@ -710,10 +710,10 @@ void karma_buf_setup(t_karma *x, t_symbol *s)
         x->bmsr     = buffer_getmillisamplerate(buf);
         x->bsr      = buffer_getsamplerate(buf);
         x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
-        x->srscale                  = x->bsr / x->ssr;
+        x->srscale                  = x->ssr / x->bsr;//x->bsr / x->ssr;// !!
         x->bvsnorm  = x->vsnorm * (x->bsr / (double)x->bframes);
         x->minloop  = x->startloop  = 0.0;
-        x->maxloop  = x->endloop    = (x->bframes - 1);
+        x->maxloop  = x->endloop    = (x->bframes - 1);// * ((x->bchans > 1) ? x->bchans : 1);
         x->selstart                 = 0.0;
         x->selection                = 1.0;
 
@@ -735,12 +735,12 @@ void karma_buf_modify(t_karma *x, t_buffer_obj *b)
         if ( ( (x->bchans != modchans) || (x->bframes != modframes) ) || (x->bmsr != modbmsr) ) {
             x->bsr                      = modbsr;
             x->bmsr                     = modbmsr;
-            x->srscale                  = modbsr / x->ssr;
+            x->srscale                  = x->ssr / modbsr;//modbsr / x->ssr;// !!
             x->bframes                  = modframes;
             x->bchans                   = modchans;
             x->nchans   = (modchans < x->ochans) ? modchans : x->ochans;    // MIN
             x->minloop  = x->startloop  = 0.0;
-            x->maxloop  = x->endloop    = (x->bframes - 1);
+            x->maxloop  = x->endloop    = (x->bframes - 1);// * ((modchans > 1) ? modchans : 1);
             x->bvsnorm  = x->vsnorm * (modbsr / (double)modframes);
 
             karma_select_size(x, x->selection);
@@ -760,6 +760,7 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
     t_symbol *caller_sym = 0;
     t_buffer_obj *buf;
     t_ptr_int bframesm1;//, bchanscnt;
+    long bchans;
     double bframesms, bvsnorm, bvsnorm05;               // !!
     double low, lowtemp, high, hightemp;
     low = templow;
@@ -773,13 +774,14 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
         x->bmsr     = buffer_getmillisamplerate(buf);
         x->bsr      = buffer_getsamplerate(buf);
         x->nchans   = (x->bchans < x->ochans) ? x->bchans : x->ochans;  // MIN
-        x->srscale  = x->bsr / x->ssr;
+        x->srscale  = x->ssr / x->bsr;//x->bsr / x->ssr;// !!
         
         caller_sym  = gensym("set");
     } else {
         caller_sym  = gensym("setloop");
     }
 
+    bchans      = x->bchans;
     bframesm1   = (x->bframes - 1);
     bframesms   = (double)bframesm1 / x->bmsr;                  // buffersize in milliseconds
     bvsnorm     = x->vsnorm * (x->bsr / (double)x->bframes);    // vectorsize in (double) % 0..1 (phase) units of buffer~
@@ -860,6 +862,16 @@ void karma_buf_values_internal(t_karma *x, double templow, double temphigh, long
     //post("loop start samples %.2f, loop end samples %.2f, units used %s", (low * bframesm1), (high * bframesm1), *loop_points_sym);
 */
     // to samples, and account for channels & buffer samplerate
+/*    if (bchans > 1) {
+        low     = (low * bframesm1) * bchans;// + channeloffset;
+        high    = (high * bframesm1) * bchans;// + channeloffset;
+    } else {
+        low     = (low * bframesm1);// + channeloffset;
+        high    = (high * bframesm1);// + channeloffset;
+    }
+    x->minloop = x->startloop = low;
+    x->maxloop = x->endloop = high;
+*/
     x->minloop = x->startloop = low * bframesm1;
     x->maxloop = x->endloop = high * bframesm1;
 
@@ -941,7 +953,7 @@ void karma_buf_change_internal(t_karma *x, t_symbol *s, short argc, t_atom *argv
 
             // ... obviously pete is a bit confused about all this ...
             x->directionorig = 0;
-            x->maxhead = x->playhead;// = 0.0; // x->maxhead = x->playhead;    // ?? 'takeover' should be an option ??
+            x->maxhead = x->playhead = 0.0;             // x->maxhead = x->playhead;    // ?? 'takeover' should be an option ??
             x->recordhead = -1;
 
             // maximum length message (4[6] atoms after 'set') = " set ...
@@ -1243,7 +1255,7 @@ void karma_clock_list(t_karma *x)
         double normalisedposition;
         
         float reversestart  = (frames - setloopsize) / bmsr;
-        float forwardstart  = (minloop + 1) / bmsr; // ??       // !! this is always wrong... ...why ?? // !! FIX !!
+        float forwardstart  =  minloop / bmsr; // ??   // !! this is always wrong... ...why ?? // !! FIX !!    // (minloop + 1) / bmsr;
         float reverseend    = frames / bmsr;
         float forwardend    = (maxloop + 1) / bmsr;
         float selectionsize = (selection * (setloopsize + 1)) / bmsr;
@@ -1393,7 +1405,7 @@ void karma_select_size(t_karma *x, double duration)
 void karma_select_start(t_karma *x, double positionstart)   // positionstart = "position" float message
 {
     t_ptr_int bfrmaesminusone, setloopsize;
-    x->selstart = positionstart;
+    x->selstart = CLAMP(positionstart, 0., 1.);
     
     // for dealing with selection-out-of-bounds logic:
     
@@ -1431,12 +1443,13 @@ void karma_select_start(t_karma *x, double positionstart)   // positionstart = "
     }
 }
 
-void karma_select_size(t_karma *x, double duration) // duration = "window" float message
+void karma_select_size(t_karma *x, double duration)     // duration = "window" float message
 {
     t_ptr_int bfrmaesminusone, setloopsize;
     
-    double minsampsnorm = x->bvsnorm * 0.5;         // half vectorsize samples minimum as normalised value  // !! buffer sr !!
-    x->selection = (duration < minsampsnorm) ? minsampsnorm : duration;
+    //double minsampsnorm = x->bvsnorm * 0.5;           // half vectorsize samples minimum as normalised value  // !! buffer sr !!
+    //x->selection = (duration < 0.0) ? 0.0 : duration; // !! allow zero for rodrigo !!
+    x->selection = CLAMP(duration, 0., 1.);
     
     // for dealing with selection-out-of-bounds logic:
     
