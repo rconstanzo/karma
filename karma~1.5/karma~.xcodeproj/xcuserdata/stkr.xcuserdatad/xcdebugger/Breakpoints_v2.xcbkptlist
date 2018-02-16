@@ -15,7 +15,7 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "679"
             endingLineNumber = "679"
-            landmarkName = "karma_free"
+            landmarkName = "karma_new"
             landmarkType = "9">
          </BreakpointContent>
       </BreakpointProxy>
@@ -48,6 +48,38 @@
             startingLineNumber = "2018"
             endingLineNumber = "2018"
             landmarkName = "karma_mono_perform"
+            landmarkType = "9">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "karma~.c"
+            timestampString = "539866400.236461"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "2416"
+            endingLineNumber = "2416"
+            landmarkName = "karma_mono_perform"
+            landmarkType = "9">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "karma~.c"
+            timestampString = "539881697.757079"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "5083"
+            endingLineNumber = "5083"
+            landmarkName = "karma_quad_perform"
             landmarkType = "9">
          </BreakpointContent>
       </BreakpointProxy>
