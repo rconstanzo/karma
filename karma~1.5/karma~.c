@@ -86,7 +86,7 @@
 
 typedef struct _karma {
     
-    t_pxobject       k_ob;
+    t_pxobject      k_ob;
     t_buffer_ref    *buf;
     t_buffer_ref    *buf_temp;      // so that 'set' errors etc do not interupt current buf playback ...
     t_symbol        *bufname;
@@ -161,7 +161,7 @@ typedef struct _karma {
     char    directionorig;  // original direction loop was recorded ("if loop was initially recorded in reverse started from end-of-buffer etc")
     char    directionprev;  // previous direction ("marker for directional changes to place where fades need to happen during recording")
     
-    t_bool  stopallowed;    // flag, '0' if already stopped once (& init)
+    t_bool  stopallowed;    // flag, 'false' if already stopped once (& init)
     t_bool  go;             // execute play ??
     t_bool  record;         // record flag
     t_bool  recordprev;     // previous record flag
@@ -1321,40 +1321,40 @@ void karma_clock_list(t_karma *x)
 {
     t_bool rlgtz = x->reportlist > 0;
     
-    if (rlgtz)                                                  // ('reportlist 0' == off, else milliseconds)
+    if (rlgtz)                                      // ('reportlist 0' == off, else milliseconds)
     {
-        t_ptr_int frames        = x->bframes - 1;
-        t_ptr_int minloop       = x->minloop;
+        t_ptr_int frames        = x->bframes - 1;   // !! no '- 1' ??
         t_ptr_int maxloop       = x->maxloop;
-        t_ptr_int setloopsize   = maxloop - minloop;
-        
-        t_bool directflag   = x->directionorig < 0;             // !! reverse = 1, forward = 0
-        t_bool record       = x->record;                        // pointless (and actually is 'record' or 'overdub')
-        t_bool go           = x->go;                            // pointless (and actually this is on whenever transport is,...
-                                                                // ...not stricly just 'play')
-        char statehuman     = x->statehuman;
+        t_ptr_int minloop       = x->minloop;
+        t_ptr_int setloopsize;
         
         double bmsr         = x->bmsr;
         double playhead     = x->playhead;
         double selection    = x->selection;
         double normalisedposition;
+        setloopsize         = maxloop - minloop;
         
-        float reversestart  = (frames - setloopsize) / bmsr;
-        float forwardstart  =  minloop / bmsr; // ??    // !! this is always wrong... ...why ?? // !! FIX !!    // (minloop + 1) / bmsr;
-        float reverseend    =  frames / bmsr;
-        float forwardend    = (maxloop + 1) / bmsr;     // !!
-        float selectionsize = (selection * (setloopsize + 1)) / bmsr;
-        
+        float reversestart  = ((double)(frames - setloopsize));
+        float forwardstart  = ((double)minloop);    // ??           // (minloop + 1)
+        float reverseend    = ((double)frames);
+        float forwardend    = ((double)maxloop);    // !!           // (maxloop + 1)        // !! only broken on initial buffersize report ?? !!
+        float selectionsize = (selection * ((double)setloopsize));  // (setloopsize + 1)    // !! only broken on initial buffersize report ?? !!
+
+        t_bool directflag   = x->directionorig < 0;                 // !! reverse = 1, forward = 0
+        t_bool record       = x->record;                            // pointless (and actually is 'record' or 'overdub')
+        t_bool go           = x->go;                                // pointless (and actually this is on whenever transport is,...
+                                                                    // ...not stricly just 'play')
+        char statehuman     = x->statehuman;
                                                     //  ((playhead-(frames-maxloop))/setloopsize) : ((playhead-startloop)/setloopsize)  // ??
         normalisedposition  = CLAMP( directflag ? ((playhead-(frames-setloopsize))/setloopsize) : ((playhead-minloop)/setloopsize), 0., 1. );
         
         t_atom datalist[7];                         // !! reverse logics are wrong ??
-        atom_setfloat(  datalist + 0,   normalisedposition  );                                  // position float normalised 0..1
+        atom_setfloat(  datalist + 0,   normalisedposition      );                              // position float normalised 0..1
         atom_setlong(   datalist + 1,   go         );                                           // play flag int
         atom_setlong(   datalist + 2,   record     );                                           // record flag int
-        atom_setfloat(  datalist + 3, ( directflag ? reversestart   :   forwardstart    )   );  // start float ms
-        atom_setfloat(  datalist + 4, ( directflag ? reverseend     :   forwardend      )   );  // end float ms
-        atom_setfloat(  datalist + 5, ( selectionsize   )   );                                  // window float ms
+        atom_setfloat(  datalist + 3, ( directflag ? reversestart   :   forwardstart) / bmsr ); // start float ms
+        atom_setfloat(  datalist + 4, ( directflag ? reverseend     :   forwardend  ) / bmsr ); // end float ms
+        atom_setfloat(  datalist + 5, ( selectionsize / bmsr )  );                              // window float ms
         atom_setlong(   datalist + 6,   statehuman );                                           // state flag int
         
         outlet_list(x->messout, 0L, 7, datalist);
@@ -2344,7 +2344,7 @@ void karma_mono_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
             *out1++ = osamp1;
             if (syncoutlet) {
                 setloopsize = maxloop-minloop;
-                *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
             }
 
             /*
@@ -2616,7 +2616,7 @@ apned:
             *out1++ = osamp1;
             if (syncoutlet) {
                 setloopsize = maxloop-minloop;
-                *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
             }
             
             // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -2853,10 +2853,10 @@ apned:
     }
     buffer_unlocksamples(buf);
     
-    if (x->clockgo) {           // list-outlet stuff
-        clock_delay(x->tclock, 0);
+    if (x->clockgo) {                           // list-outlet stuff
+        clock_delay(x->tclock, 0);              // why ??
         x->clockgo  = 0;
-    } else if ((!go) || (x->reportlist <= 0)) {
+    } else if ((!go) || (x->reportlist <= 0)) { // why '!go' ??
         clock_unset(x->tclock);
         x->clockgo  = 1;
     }
@@ -3428,7 +3428,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                 *out2++ = osamp2;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 /*
@@ -3713,7 +3713,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                 *out2++ = osamp2;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -4340,7 +4340,7 @@ void karma_stereo_perform(t_karma *x, t_object *dsp64, double **ins, long nins, 
                 *out2++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 /*
@@ -4613,7 +4613,7 @@ apnde:
                 *out2++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -4851,10 +4851,10 @@ apnde:
     }
     buffer_unlocksamples(buf);
     
-    if (x->clockgo) {           // list-outlet stuff
-        clock_delay(x->tclock, 0);
+    if (x->clockgo) {                           // list-outlet stuff
+        clock_delay(x->tclock, 0);              // why ??
         x->clockgo  = 0;
-    } else if ((!go) || (x->reportlist <= 0)) {
+    } else if ((!go) || (x->reportlist <= 0)) { // why '!go' ??
         clock_unset(x->tclock);
         x->clockgo  = 1;
     }
@@ -5463,7 +5463,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 *out4++ = osamp4;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 /*
@@ -5778,7 +5778,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 *out4++ = osamp4;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -6516,7 +6516,7 @@ void karma_quad_perform(t_karma *x, t_object *dsp64, double **ins, long nins, do
                 *out4++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 /*
@@ -6818,7 +6818,7 @@ apden:
                 *out4++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -7503,7 +7503,7 @@ apden:
                 *out4++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 /*
@@ -7792,7 +7792,7 @@ apdne:
                 *out4++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -8425,7 +8425,7 @@ apdne:
                 *out4++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 /*
@@ -8704,7 +8704,7 @@ apnde:
                 *out4++ = 0.0;
                 if (syncoutlet) {
                     setloopsize = maxloop-minloop;
-                    *outPh++    = initialhigh;//(directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
+                    *outPh++    = (directionorig>=0) ? ((accuratehead-minloop)/setloopsize) : ((accuratehead-(frames-setloopsize))/setloopsize);
                 }
                 
                 // ~ipoke - originally by PA Tremblay: http://www.pierrealexandretremblay.com/welcome.html
@@ -8942,10 +8942,10 @@ apnde:
     }
     buffer_unlocksamples(buf);
     
-    if (x->clockgo) {           // list-outlet stuff
-        clock_delay(x->tclock, 0);
+    if (x->clockgo) {                           // list-outlet stuff
+        clock_delay(x->tclock, 0);              // why ??
         x->clockgo  = 0;
-    } else if ((!go) || (x->reportlist <= 0)) {
+    } else if ((!go) || (x->reportlist <= 0)) { // why '!go' ??
         clock_unset(x->tclock);
         x->clockgo  = 1;
     }
