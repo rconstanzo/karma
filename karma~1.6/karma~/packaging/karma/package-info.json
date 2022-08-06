@@ -1,0 +1,36 @@
+{
+	"author" : "Rodrigo Constanzo and raja",
+	"authors" : [  ],
+	"description" : "A dynamically lengthened varispeed record/playback looper with complex functionality.",
+	"displayname" : "karma",
+	"extends" : "",
+	"extensible" : 0,
+	"homepatcher" : "karma_overview.maxpat",
+	"max_version_max" : "none",
+	"max_version_min" : "none",
+	"name" : "karma",
+	"os" : 	{
+		"macintosh" : 		{
+			"platform" : [ "x64", "aarch64" ],
+			"min_version" : "none"
+		}
+,
+		"windows" : 		{
+			"platform" : [ "ia32", "x64" ],
+			"min_version" : "none"
+		}
+
+	}
+,
+	"tags" : [ "audio", "externals" ],
+	"version" : "1.6.0",
+	"website" : "http://www.rodrigoconstanzo.com/karma",
+	"filelist" : 	{
+		"externals" : [ "karma~.mxe", "karma~.mxe64", "karma~.mxo" ],
+		"extras" : [ "karma_overview.maxpat" ],
+		"help" : [ "karma~.maxhelp" ]
+	}
+,
+	"c74install" : 1,
+	"installdate" : 3593513541
+}

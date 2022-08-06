@@ -3,37 +3,21 @@ karma~ by Rodrigo Constanzo & raja & pete
 
 The karma~ object is a dynamically lengthed varispeed sample-recording and playback object with complex functionality, which references the audio information stored in a buffer~ object having the same name.
 
-Version 1.1 (current public release):
-For the mac version (.mxo) there are 2 versions of the external included (along with the help file). The (b) version is the 32/64bit version that will run in any version of Max (versions 5 or 6 or 7, 32 or 64 bit). The non-b version is a purely 64-bit external. The features in both are the same. The windows version comes in the form of a 32-bit version (.mxe) and a 64-bit version (.mxe64).
-
-Version 1.4 (interim experimental build, do not use):
-OS X only. This experimental version adds feature requests and so, but was never intended for full public release. Here for comparison only.
-
-Version 1.5 (previous development version):
-OS X only for now, 32 & 64 bit UB (.mxo). Like version 1.4 - feature additions and bug fixes. Up to 4 channels operation, optional audio rate sync outlet (object arg #3 flag), state-machine added to data (list) outlet, etc.
-
 Version 1.6 (current beta version):
 The mac version (.mxo) is a 64-bit UB2, working on both Intel and Apple Silicon machines, for Max 7 or later. The windows version comes in the form of a 64-bit Intel external (.mxe64), for Max 7 (64-bit) or Max 8 or later.
-!! NOTE !! The Windows versions are still version 1.1 and NOT updated with the new 1.6 features - coming soon.
+!! NOTE !! The Windows versions are still version 1.1 and NOT updated with the new features - coming soon.
 
-Version 2.0 (future version):
-Coming one day.
 
 You can find out more information and download the public release version here:
 http://www.rodrigoconstanzo.com/karma
 
-You can follow the GitHub repository here:
+You can follow the GitHub repository here (including older 32-bit versions):
 https://github.com/rconstanzo/karma
 
 ==================================
 
-Version 1.1 - Version 1.5:
-To build karma~ on your machine, clone this git repo into the `source` directory of the Max SDK.
 
-For example, if your Max SDK lives in `~/Documents/Max 7/Packages/max-sdk-7.1.0`, then the path to the Xcode project for the 1.1 (b) version of the external should be at `~/Documents/Max 7/Packages/max-sdk-7.1.0/source/karma/karma~1.1/karma~(b)/karma~.xcodeproj`
-
-Version 1.6:
-To build karma~ on your machine, clone the "karma~" folder inside the 1.6 folder git repo into the `source/audio` directory of the Max SDK 8.2 and use cmake as instructed in the Max-SDK 8.2 readme files.
+To build karma~ on your machine, clone this git repo into the `source/audio` directory of the Max SDK and use cmake as instructed in the Max-SDK 8.2 readme files.
 
 If you choose to place the git repo somewhere else on your system, the project won't build immediately after cloning, and you will have to futz with the build configuraiton in order to get it working.
 
