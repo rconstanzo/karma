@@ -196,7 +196,7 @@
 									"numinlets" : 1,
 									"numoutlets" : 7,
 									"outlettype" : [ "float", "int", "int", "float", "float", "float", "int" ],
-									"patching_rect" : [ 659.388733000000002, 458.858703999999989, 136.0, 22.0 ],
+									"patching_rect" : [ 659.388733000000002, 458.858703999999989, 137.0, 22.0 ],
 									"text" : "unpack f i i f f f i"
 								}
 
@@ -609,7 +609,7 @@
 , 							{
 								"patchline" : 								{
 									"destination" : [ "obj-72", 1 ],
-									"midpoints" : [ 746.888733000000002, 488.449584999999956, 747.388733000000002, 488.449584999999956 ],
+									"midpoints" : [ 747.555399666666631, 488.449584999999956, 747.388733000000002, 488.449584999999956 ],
 									"source" : [ "obj-21", 4 ]
 								}
 
@@ -617,7 +617,7 @@
 , 							{
 								"patchline" : 								{
 									"destination" : [ "obj-72", 0 ],
-									"midpoints" : [ 727.388733000000002, 488.449584999999956, 668.888733000000002, 488.449584999999956 ],
+									"midpoints" : [ 727.888733000000002, 488.449584999999956, 668.888733000000002, 488.449584999999956 ],
 									"source" : [ "obj-21", 3 ]
 								}
 
@@ -916,7 +916,7 @@
 									"numinlets" : 1,
 									"numoutlets" : 7,
 									"outlettype" : [ "float", "int", "int", "float", "float", "float", "int" ],
-									"patching_rect" : [ 289.388733000000002, 533.858703999999989, 136.0, 22.0 ],
+									"patching_rect" : [ 289.388733000000002, 533.858703999999989, 137.0, 22.0 ],
 									"text" : "unpack f i i f f f i"
 								}
 
@@ -1373,7 +1373,7 @@
 , 							{
 								"patchline" : 								{
 									"destination" : [ "obj-72", 1 ],
-									"midpoints" : [ 376.888733000000002, 563.449584999999956, 377.388733000000002, 563.449584999999956 ],
+									"midpoints" : [ 377.555399666666688, 563.449584999999956, 377.388733000000002, 563.449584999999956 ],
 									"source" : [ "obj-21", 4 ]
 								}
 
@@ -1381,7 +1381,7 @@
 , 							{
 								"patchline" : 								{
 									"destination" : [ "obj-72", 0 ],
-									"midpoints" : [ 357.388733000000002, 563.449584999999956, 298.888733000000002, 563.449584999999956 ],
+									"midpoints" : [ 357.888733000000002, 563.449584999999956, 298.888733000000002, 563.449584999999956 ],
 									"source" : [ "obj-21", 3 ]
 								}
 
@@ -12380,7 +12380,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 318.0, 2771.0, 150.0, 20.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 311.638702000000023, 3496.0, 150.0, 20.0 ]
+													"presentation_rect" : [ 311.638702000000023, 2912.0, 150.0, 20.0 ]
 												}
 
 											}
@@ -12395,7 +12395,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 131.638701999999995, 536.5, 4762.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 94.0, 536.0, 3404.0, 22.0 ],
+													"presentation_rect" : [ 94.0, 536.0, 507.0, 22.0 ],
 													"text" : "known bug : parameters set by @attributes are set to '1'. Use attrui or messages instead.",
 													"textcolor" : [ 0.92549, 0.364706, 0.341176, 1.0 ]
 												}
@@ -12411,7 +12411,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 50.638702000000002, 686.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 20.277405000000002, 3290.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 20.277405000000002, 2706.5, 584.0, 22.0 ],
 													"text" : "list",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -12429,7 +12429,7 @@
 													"patching_rect" : [ 40.0, 726.0, 486.0, 149.0 ],
 													"presentation" : 1,
 													"presentation_linecount" : 11,
-													"presentation_rect" : [ 28.638701999999999, 3330.0, 663.0, 149.0 ],
+													"presentation_rect" : [ 28.638701999999999, 2746.0, 663.0, 149.0 ],
 													"text" : "Information and sync output. The right most outlet outputs a 7 item list reflecting the state of the internal states and settings of karma~.\n\nThese are:\ncurrent position [float 0. to 1.]\nplay state [int]\nrecord state [int]\nstart position [ms]\nend position [ms]\nwindow size [ms]\ncurrent state [int]",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -12447,7 +12447,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 26.0, 683.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 3287.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 14.638702, 2703.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -12463,7 +12463,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 48.638702000000002, 615.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 20.277405000000002, 3155.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 20.277405000000002, 2571.5, 584.0, 22.0 ],
 													"text" : "signal",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -12481,7 +12481,7 @@
 													"patching_rect" : [ 38.0, 655.0, 489.0, 71.0 ],
 													"presentation" : 1,
 													"presentation_linecount" : 5,
-													"presentation_rect" : [ 28.638701999999999, 3195.0, 672.0, 71.0 ],
+													"presentation_rect" : [ 28.638701999999999, 2611.0, 672.0, 71.0 ],
 													"text" : "Out left outlet: Sample output. If karma~ has two output channels, the left outlet plays the left channel of the sample. \n\nOut middle outlet(s): Sample output. If karma~ has two or four output channels, the middle outlets play the channels other than channel 1. ",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -12498,7 +12498,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 24.0, 562.0, 119.0, 30.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 3102.0, 119.0, 30.0 ],
+													"presentation_rect" : [ 14.638702, 2518.0, 119.0, 30.0 ],
 													"text" : "Output",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -12513,7 +12513,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 24.0, 593.0, 5.0, 100.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 3133.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 14.638702, 2549.0, 714.0, 30.0 ],
 													"saved_attribute_attributes" : 													{
 														"linecolor" : 														{
 															"expression" : ""
@@ -12536,7 +12536,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 24.0, 612.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 3152.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 14.638702, 2568.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -12552,7 +12552,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 35.638702000000002, 2497.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 39.277405000000002, 3005.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 39.277405000000002, 2421.5, 584.0, 22.0 ],
 													"text" : "window [float]",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -12569,8 +12569,8 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 25.0, 2532.0, 486.0, 32.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 28.638701999999999, 3040.0, 663.0, 19.0 ],
-													"text" : "Sets the amount the defined loop to play. A window of 1.0 will play through the the whole loop.",
+													"presentation_rect" : [ 28.638701999999999, 2456.0, 663.0, 19.0 ],
+													"text" : "Sets the amount of the defined loop to play. A window of 1.0 will play through the the whole loop.",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
 
@@ -12587,7 +12587,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 11.0, 2494.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 3002.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 14.638702, 2418.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -12604,7 +12604,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 15.638702, 2502.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 19.277405000000002, 3010.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 19.277405000000002, 2426.0, 23.0, 18.0 ],
 													"text" : "M",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -12622,7 +12622,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 17.138701999999999, 2502.25, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 20.777405000000002, 3010.25, 15.0, 15.0 ],
+													"presentation_rect" : [ 20.777405000000002, 2426.25, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -12638,7 +12638,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 35.638702000000002, 2402.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 39.277405000000002, 2910.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 39.277405000000002, 2326.5, 584.0, 22.0 ],
 													"text" : "stop",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -12656,7 +12656,7 @@
 													"patching_rect" : [ 25.0, 2442.0, 486.0, 32.0 ],
 													"presentation" : 1,
 													"presentation_linecount" : 2,
-													"presentation_rect" : [ 28.638701999999999, 2950.0, 663.0, 32.0 ],
+													"presentation_rect" : [ 28.638701999999999, 2366.0, 663.0, 32.0 ],
 													"text" : "Stops playback or recording immediately. If the creation of an initial loop is ended with a 'stop' message, it will also define the beginning and end points for the loop.",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -12674,7 +12674,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 11.0, 2399.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 2907.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 14.638702, 2323.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -12691,7 +12691,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 15.638702, 2407.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 19.277405000000002, 2915.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 19.277405000000002, 2331.0, 23.0, 18.0 ],
 													"text" : "M",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -12709,181 +12709,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 17.138701999999999, 2407.25, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 20.777405000000002, 2915.25, 15.0, 15.0 ],
-													"proportion" : 0.39,
-													"rounded" : 0
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontname" : "Helvetica Neue",
-													"fontsize" : 13.0,
-													"id" : "obj-111",
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 36.638702000000002, 2320.5, 817.0, 22.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 39.277405000000002, 2716.5, 584.0, 22.0 ],
-													"text" : "sncurv [int]",
-													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontname" : "Helvetica",
-													"fontsize" : 13.0,
-													"id" : "obj-112",
-													"linecount" : 11,
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 26.0, 2355.0, 487.0, 149.0 ],
-													"presentation" : 1,
-													"presentation_linecount" : 10,
-													"presentation_rect" : [ 28.638701999999999, 2751.0, 663.0, 136.0 ],
-													"text" : "Applies easing functions to the switch & ramp algorithm to allow for different in and out curves.\n\nThe different possibilities for 'snrcurv' are:\n0 = linear ramp\n1 = sine-based ramp\n2 = cubic ease in ramp\n3 = cubic ease out ramp\n4 = exponential ease in ramp\n5 = exponential ease out ramp\n6 = exponential ease in and out",
-													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"angle" : 270.0,
-													"bgcolor" : [ 0.862745, 0.870588, 0.878431, 0.25 ],
-													"bordercolor" : [ 0.803922, 0.898039, 0.909804, 0.0 ],
-													"id" : "obj-113",
-													"maxclass" : "panel",
-													"mode" : 0,
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 12.0, 2317.0, 485.0, 70.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 2713.0, 714.0, 30.0 ],
-													"proportion" : 0.39,
-													"rounded" : 0
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontface" : 0,
-													"fontname" : "Helvetica",
-													"fontsize" : 12.0,
-													"id" : "obj-114",
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 16.638701999999999, 2325.0, 23.0, 18.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 19.277405000000002, 2721.0, 23.0, 18.0 ],
-													"text" : "M",
-													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"angle" : 270.0,
-													"bgcolor" : [ 0.313726, 0.588235, 0.588235, 1.0 ],
-													"bordercolor" : [ 0.803922, 0.898039, 0.909804, 0.0 ],
-													"id" : "obj-115",
-													"maxclass" : "panel",
-													"mode" : 0,
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 18.138701999999999, 2325.25, 15.0, 15.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 20.777405000000002, 2721.25, 15.0, 15.0 ],
-													"proportion" : 0.39,
-													"rounded" : 0
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontname" : "Helvetica Neue",
-													"fontsize" : 13.0,
-													"id" : "obj-116",
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 36.638702000000002, 2225.5, 817.0, 22.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 39.277405000000002, 2621.5, 584.0, 22.0 ],
-													"text" : "snramp [int]",
-													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontname" : "Helvetica",
-													"fontsize" : 13.0,
-													"id" : "obj-117",
-													"linecount" : 3,
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 26.0, 2265.0, 492.0, 45.0 ],
-													"presentation" : 1,
-													"presentation_linecount" : 2,
-													"presentation_rect" : [ 28.638701999999999, 2661.0, 669.0, 32.0 ],
-													"text" : "Sets the fade time for 'switch & ramp' independently of the off-line ramp time set via ramp. Switch & ramp declicks instantaneous changes at the playback, primarily when jumping around the buffer arbitrarily.",
-													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"angle" : 270.0,
-													"bgcolor" : [ 0.862745, 0.870588, 0.878431, 0.25 ],
-													"bordercolor" : [ 0.803922, 0.898039, 0.909804, 0.0 ],
-													"id" : "obj-118",
-													"maxclass" : "panel",
-													"mode" : 0,
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 12.0, 2222.0, 485.0, 70.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 2618.0, 714.0, 30.0 ],
-													"proportion" : 0.39,
-													"rounded" : 0
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontface" : 0,
-													"fontname" : "Helvetica",
-													"fontsize" : 12.0,
-													"id" : "obj-119",
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 16.638701999999999, 2230.0, 23.0, 18.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 19.277405000000002, 2626.0, 23.0, 18.0 ],
-													"text" : "M",
-													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"angle" : 270.0,
-													"bgcolor" : [ 0.313726, 0.588235, 0.588235, 1.0 ],
-													"bordercolor" : [ 0.803922, 0.898039, 0.909804, 0.0 ],
-													"id" : "obj-120",
-													"maxclass" : "panel",
-													"mode" : 0,
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 18.138701999999999, 2230.25, 15.0, 15.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 20.777405000000002, 2626.25, 15.0, 15.0 ],
+													"presentation_rect" : [ 20.777405000000002, 2331.25, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -12899,7 +12725,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 36.638702000000002, 2133.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 2414.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 34.638702000000002, 2121.5, 584.0, 22.0 ],
 													"text" : "signal",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -12917,8 +12743,8 @@
 													"patching_rect" : [ 26.0, 2168.0, 488.0, 175.0 ],
 													"presentation" : 1,
 													"presentation_linecount" : 11,
-													"presentation_rect" : [ 24.0, 2449.0, 663.0, 149.0 ],
-													"text" : "In left inlet: Sample input. If karma~ has two output channels, the left inet records the left channel of the sample. \n\nIn middle inlet: Sample input. If karma~ has two output channels, the middle inet records the right channel of the sample. \n\nIn right inlet: Defines the sample increment for playback of a sound from a buffer~. A sample increment of 0 stops playback. A sample increment of 1 plays the sample at normal speed. A sample increment of -1 plays the sample backwards at normal speed. A sample increment of 2 plays the sample at twice the normal speed. A sample increment of .5 plays the sample at half the normal speed. The sample increment can change over time for vibrato or other types of speed effects. The karma~ object uses the buffer~ sampling rate to determine playback speed. ",
+													"presentation_rect" : [ 24.0, 2156.0, 663.0, 149.0 ],
+													"text" : "In left inlet: Sample input. If karma~ has two output channels, the left inet records the left channel of the sample. \n\nIn middle inlet: Sample input. If karma~ has two or four output channels, the middle inets record the other channels of the sample. \n\nIn right inlet: Defines the sample increment for playback of a sound from a buffer~. A sample increment of 0 stops playback. A sample increment of 1 plays the sample at normal speed. A sample increment of -1 plays the sample backwards at normal speed. A sample increment of 2 plays the sample at twice the normal speed. A sample increment of .5 plays the sample at half the normal speed. The sample increment can change over time for vibrato or other types of speed effects. The karma~ object uses the buffer~ sampling rate to determine playback speed. ",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
 
@@ -12935,7 +12761,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 12.0, 2130.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 2411.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 2118.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -12952,7 +12778,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 16.638701999999999, 2138.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 2419.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 14.638702, 2126.0, 23.0, 18.0 ],
 													"text" : "M",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -12970,7 +12796,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 18.138701999999999, 2138.25, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 16.138701999999999, 2419.25, 15.0, 15.0 ],
+													"presentation_rect" : [ 16.138701999999999, 2126.25, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -12986,7 +12812,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 36.638702000000002, 2038.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 2331.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 34.638702000000002, 2038.5, 584.0, 22.0 ],
 													"text" : "set [symbol]",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13002,7 +12828,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 26.0, 2078.0, 486.0, 19.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 24.0, 2371.0, 663.0, 19.0 ],
+													"presentation_rect" : [ 24.0, 2078.0, 663.0, 19.0 ],
 													"text" : "Sets the buffer~ object associated with karma~ playback.",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13020,7 +12846,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 12.0, 2035.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 2328.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 2035.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13037,7 +12863,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 16.638701999999999, 2043.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 2336.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 14.638702, 2043.0, 23.0, 18.0 ],
 													"text" : "M",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -13055,92 +12881,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 18.138701999999999, 2043.25, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 16.138701999999999, 2336.25, 15.0, 15.0 ],
-													"proportion" : 0.39,
-													"rounded" : 0
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontname" : "Helvetica Neue",
-													"fontsize" : 13.0,
-													"id" : "obj-131",
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 36.638702000000002, 1949.5, 817.0, 22.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 2255.5, 584.0, 22.0 ],
-													"text" : "report [int]",
-													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontname" : "Helvetica",
-													"fontsize" : 13.0,
-													"id" : "obj-132",
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 26.0, 1984.0, 486.0, 19.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 24.0, 2290.0, 663.0, 19.0 ],
-													"text" : "Sets the report time for the list output.",
-													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"angle" : 270.0,
-													"bgcolor" : [ 0.862745, 0.870588, 0.878431, 0.25 ],
-													"bordercolor" : [ 0.803922, 0.898039, 0.909804, 0.0 ],
-													"id" : "obj-133",
-													"maxclass" : "panel",
-													"mode" : 0,
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 12.0, 1946.0, 485.0, 70.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 2252.0, 714.0, 30.0 ],
-													"proportion" : 0.39,
-													"rounded" : 0
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontface" : 0,
-													"fontname" : "Helvetica",
-													"fontsize" : 12.0,
-													"id" : "obj-134",
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 16.638701999999999, 1954.0, 23.0, 18.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 2260.0, 23.0, 18.0 ],
-													"text" : "M",
-													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"angle" : 270.0,
-													"bgcolor" : [ 0.313726, 0.588235, 0.588235, 1.0 ],
-													"bordercolor" : [ 0.803922, 0.898039, 0.909804, 0.0 ],
-													"id" : "obj-135",
-													"maxclass" : "panel",
-													"mode" : 0,
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 18.138701999999999, 1954.25, 15.0, 15.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 16.138701999999999, 2260.25, 15.0, 15.0 ],
+													"presentation_rect" : [ 16.138701999999999, 2043.25, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13156,7 +12897,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 36.638702000000002, 1854.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 2160.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 34.638702000000002, 1932.5, 584.0, 22.0 ],
 													"text" : "record",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13174,7 +12915,7 @@
 													"patching_rect" : [ 26.0, 1894.0, 489.0, 58.0 ],
 													"presentation" : 1,
 													"presentation_linecount" : 3,
-													"presentation_rect" : [ 24.0, 2200.0, 663.0, 45.0 ],
+													"presentation_rect" : [ 24.0, 1972.0, 663.0, 45.0 ],
 													"text" : "Begins recording audio to the buffer associated with karma~. If the object is in a stopped state, a 'record' message will begin recording a new loop. If the object is in a playing state, a 'record' message will begin overdubbing. If the object is in an overdubbing state, a 'record' message will put the object in a playing state.",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13192,7 +12933,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 12.0, 1851.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 2157.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 1929.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13209,7 +12950,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 16.638701999999999, 1859.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 2165.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 14.638702, 1937.0, 23.0, 18.0 ],
 													"text" : "M",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -13227,94 +12968,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 18.138701999999999, 1859.25, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 16.138701999999999, 2165.25, 15.0, 15.0 ],
-													"proportion" : 0.39,
-													"rounded" : 0
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontname" : "Helvetica Neue",
-													"fontsize" : 13.0,
-													"id" : "obj-91",
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 33.638702000000002, 1761.5, 817.0, 22.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 2044.5, 584.0, 22.0 ],
-													"text" : "ramp [int]",
-													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontname" : "Helvetica",
-													"fontsize" : 13.0,
-													"id" : "obj-92",
-													"linecount" : 6,
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 23.0, 1796.0, 486.0, 84.0 ],
-													"presentation" : 1,
-													"presentation_linecount" : 4,
-													"presentation_rect" : [ 24.0, 2079.0, 663.0, 58.0 ],
-													"text" : "Sets the 'offline' ramp fade time. These are the cosine-based ramps which happen outside the direction of travel of the playhead to declick the recording, as well as a real-time fade at the record-input to declick the recording outside realtime awareness. Since the record-head trails the play-head by 1 sample, the cosine-fades are never heard during their creation, only after the playhead loops around or changes direction to go over them.",
-													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"angle" : 270.0,
-													"bgcolor" : [ 0.862745, 0.870588, 0.878431, 0.25 ],
-													"bordercolor" : [ 0.803922, 0.898039, 0.909804, 0.0 ],
-													"id" : "obj-93",
-													"maxclass" : "panel",
-													"mode" : 0,
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 9.0, 1758.0, 485.0, 70.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 2041.0, 714.0, 30.0 ],
-													"proportion" : 0.39,
-													"rounded" : 0
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontface" : 0,
-													"fontname" : "Helvetica",
-													"fontsize" : 12.0,
-													"id" : "obj-94",
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 13.638702, 1766.0, 23.0, 18.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 2049.0, 23.0, 18.0 ],
-													"text" : "M",
-													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"angle" : 270.0,
-													"bgcolor" : [ 0.313726, 0.588235, 0.588235, 1.0 ],
-													"bordercolor" : [ 0.803922, 0.898039, 0.909804, 0.0 ],
-													"id" : "obj-95",
-													"maxclass" : "panel",
-													"mode" : 0,
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 15.138702, 1766.25, 15.0, 15.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 16.138701999999999, 2049.25, 15.0, 15.0 ],
+													"presentation_rect" : [ 16.138701999999999, 1937.25, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13330,7 +12984,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 33.638702000000002, 1666.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 1963.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 34.638702000000002, 1853.5, 584.0, 22.0 ],
 													"text" : "position [float]",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13347,7 +13001,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 23.0, 1706.0, 486.0, 32.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 24.0, 2003.0, 663.0, 19.0 ],
+													"presentation_rect" : [ 24.0, 1893.0, 663.0, 19.0 ],
 													"text" : "Sets the playback offset for the defined loop. A position of 0.0 will play from the beginning of the defined loop.",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13365,7 +13019,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 9.0, 1663.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 1960.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 1850.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13382,7 +13036,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 13.638702, 1671.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 1968.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 14.638702, 1858.0, 23.0, 18.0 ],
 													"text" : "M",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -13400,7 +13054,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 15.138702, 1671.25, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 16.138701999999999, 1968.25, 15.0, 15.0 ],
+													"presentation_rect" : [ 16.138701999999999, 1858.25, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13416,7 +13070,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 33.638702000000002, 1574.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 1871.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 34.638702000000002, 1761.5, 584.0, 22.0 ],
 													"text" : "play",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13434,7 +13088,7 @@
 													"patching_rect" : [ 23.0, 1609.0, 486.0, 45.0 ],
 													"presentation" : 1,
 													"presentation_linecount" : 2,
-													"presentation_rect" : [ 24.0, 1906.0, 663.0, 32.0 ],
+													"presentation_rect" : [ 24.0, 1796.0, 663.0, 32.0 ],
 													"text" : "Begins playing back the recorded, or preloaded buffer associated with karma~. If the audio is already playing back, sending a 'play' message will begin playback from the start of the sample immediately.",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13452,7 +13106,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 9.0, 1571.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 1868.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 1758.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13469,7 +13123,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 13.638702, 1579.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 1876.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 14.638702, 1766.0, 23.0, 18.0 ],
 													"text" : "M",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -13487,7 +13141,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 15.138702, 1579.25, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 16.138701999999999, 1876.25, 15.0, 15.0 ],
+													"presentation_rect" : [ 16.138701999999999, 1766.25, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13503,7 +13157,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 33.638702000000002, 1479.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 1751.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 34.638702000000002, 1641.5, 584.0, 22.0 ],
 													"text" : "overdub [float]",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13521,7 +13175,7 @@
 													"patching_rect" : [ 23.0, 1519.0, 493.0, 84.0 ],
 													"presentation" : 1,
 													"presentation_linecount" : 4,
-													"presentation_rect" : [ 24.0, 1791.0, 698.0, 58.0 ],
+													"presentation_rect" : [ 24.0, 1681.0, 698.0, 58.0 ],
 													"text" : "Sets the amount by which to multiply the material in the loop while overdubbing on to it. An overdub setting of 1.0 will keep the value of the loop the same while adding new material (it is possible to distort the sample this way). A value of 0.0 will replace the audio in the loop with the incoming audio. There is no limit on the multiplier so you can create out of phase samples (negative values) or distorted samples (by using very high overdub amounts).",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13539,7 +13193,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 9.0, 1476.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 1748.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 1638.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13556,7 +13210,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 13.638702, 1484.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 1756.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 14.638702, 1646.0, 23.0, 18.0 ],
 													"text" : "M",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -13574,7 +13228,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 15.138702, 1484.25, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 16.138701999999999, 1756.25, 15.0, 15.0 ],
+													"presentation_rect" : [ 16.138701999999999, 1646.25, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13590,7 +13244,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 35.638702000000002, 1386.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 1634.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 34.638702000000002, 1524.5, 584.0, 22.0 ],
 													"text" : "jump [float]",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13608,7 +13262,7 @@
 													"patching_rect" : [ 25.0, 1421.0, 489.0, 71.0 ],
 													"presentation" : 1,
 													"presentation_linecount" : 4,
-													"presentation_rect" : [ 24.0, 1669.0, 663.0, 58.0 ],
+													"presentation_rect" : [ 24.0, 1559.0, 663.0, 58.0 ],
 													"text" : "Jumps to a position in the defined sample. If the object is playing, jumping will immediately jump to the phase indicated by the incoming message and carry on playing. Jumping while overdubbing will jump to that position and carry on recording. Jumping while the object is stopped will set the start position for the next time the play message is received.",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13626,7 +13280,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 11.0, 1383.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 1631.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 1521.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13643,7 +13297,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 15.638702, 1391.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 1639.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 14.638702, 1529.0, 23.0, 18.0 ],
 													"text" : "M",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -13661,94 +13315,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 17.138701999999999, 1391.25, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 16.138701999999999, 1639.25, 15.0, 15.0 ],
-													"proportion" : 0.39,
-													"rounded" : 0
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontname" : "Helvetica Neue",
-													"fontsize" : 13.0,
-													"id" : "obj-85",
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 35.638702000000002, 1291.5, 817.0, 22.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 1514.5, 584.0, 22.0 ],
-													"text" : "interp [int]",
-													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontname" : "Helvetica",
-													"fontsize" : 13.0,
-													"id" : "obj-87",
-													"linecount" : 6,
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 25.0, 1331.0, 486.0, 84.0 ],
-													"presentation" : 1,
-													"presentation_linecount" : 4,
-													"presentation_rect" : [ 24.0, 1554.0, 663.0, 58.0 ],
-													"text" : "Sets the interpolation mode during playback. A setting of 'interp 0' will only allow linear-interp to happen at all times. The default setting of 'interp 1' will use linear interpolation for playback while recording and cubic interpolation during regular playback. This is most noticable when switching between overdub and playback and slower playback speeds as you can hear the aliasing more with playback that uses linear interpolation. ",
-													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"angle" : 270.0,
-													"bgcolor" : [ 0.862745, 0.870588, 0.878431, 0.25 ],
-													"bordercolor" : [ 0.803922, 0.898039, 0.909804, 0.0 ],
-													"id" : "obj-88",
-													"maxclass" : "panel",
-													"mode" : 0,
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 11.0, 1288.0, 485.0, 70.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 1511.0, 714.0, 30.0 ],
-													"proportion" : 0.39,
-													"rounded" : 0
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"fontface" : 0,
-													"fontname" : "Helvetica",
-													"fontsize" : 12.0,
-													"id" : "obj-89",
-													"maxclass" : "comment",
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 15.638702, 1296.0, 23.0, 18.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 1519.0, 23.0, 18.0 ],
-													"text" : "M",
-													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
-												}
-
-											}
-, 											{
-												"box" : 												{
-													"angle" : 270.0,
-													"bgcolor" : [ 0.313726, 0.588235, 0.588235, 1.0 ],
-													"bordercolor" : [ 0.803922, 0.898039, 0.909804, 0.0 ],
-													"id" : "obj-90",
-													"maxclass" : "panel",
-													"mode" : 0,
-													"numinlets" : 1,
-													"numoutlets" : 0,
-													"patching_rect" : [ 17.138701999999999, 1296.25, 15.0, 15.0 ],
-													"presentation" : 1,
-													"presentation_rect" : [ 16.138701999999999, 1519.25, 15.0, 15.0 ],
+													"presentation_rect" : [ 16.138701999999999, 1529.25, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13764,7 +13331,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 32.638702000000002, 1200.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 1371.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 34.638702000000002, 1385.5, 584.0, 22.0 ],
 													"text" : "append",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13782,7 +13349,7 @@
 													"patching_rect" : [ 22.0, 1240.0, 486.0, 123.0 ],
 													"presentation" : 1,
 													"presentation_linecount" : 6,
-													"presentation_rect" : [ 24.0, 1406.0, 663.0, 84.0 ],
+													"presentation_rect" : [ 24.0, 1420.0, 663.0, 84.0 ],
 													"text" : "Sending a message of 'append' will put karma back in it's \"initial loop creation\" state, allowing for new defitions of the loop in/out points. From a stopped state, after creating an initial loop, sending an 'append' message will show the whole buffer in the GUI showing that the existing loop is ready to be appended. Hitting record will then begin recording where the loop previously ended. You can leave this append state by hitting play, record, or stop. If you send an 'append' message while in a play state, you can play into a new part of the buffer, and if you send an 'append' message while in an overdub state, you can record into a new part of the buffer.",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13800,7 +13367,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 8.0, 1197.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 1368.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 1382.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13817,7 +13384,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 12.638702, 1205.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 1376.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 14.638702, 1390.0, 23.0, 18.0 ],
 													"text" : "M",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -13835,7 +13402,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 14.138702, 1205.25, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 16.138701999999999, 1376.25, 15.0, 15.0 ],
+													"presentation_rect" : [ 16.138701999999999, 1390.25, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13851,7 +13418,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 36.638702000000002, 1124.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 1276.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 34.638702000000002, 1290.5, 584.0, 22.0 ],
 													"text" : "(mouse)",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13869,7 +13436,7 @@
 													"patching_rect" : [ 26.0, 1164.0, 486.0, 32.0 ],
 													"presentation" : 1,
 													"presentation_linecount" : 2,
-													"presentation_rect" : [ 24.0, 1316.0, 663.0, 32.0 ],
+													"presentation_rect" : [ 24.0, 1330.0, 663.0, 32.0 ],
 													"text" : "Double-clicking on a karma~ object opens the sample display window of the buffer~ object associated with the karma~ object.",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13886,7 +13453,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 12.0, 1071.0, 119.0, 30.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 1223.0, 119.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 1237.0, 119.0, 30.0 ],
 													"text" : "Messages",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13901,7 +13468,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 12.0, 1102.0, 5.0, 100.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 1254.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 1268.0, 714.0, 30.0 ],
 													"saved_attribute_attributes" : 													{
 														"linecolor" : 														{
 															"expression" : ""
@@ -13924,7 +13491,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 12.0, 1121.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 1273.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 1287.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -13941,7 +13508,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 110.5, 922.5, 722.0, 21.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 112.5, 986.5, 80.0, 21.0 ],
+													"presentation_rect" : [ 112.5, 1000.5, 80.0, 21.0 ],
 													"text" : "(default: 1)",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13958,7 +13525,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 108.0, 753.5, 722.0, 21.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 97.5, 817.5, 80.0, 21.0 ],
+													"presentation_rect" : [ 97.5, 831.5, 80.0, 21.0 ],
 													"text" : "(default: 50)",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13975,7 +13542,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 111.0, 838.5, 722.0, 21.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 106.5, 894.5, 80.0, 21.0 ],
+													"presentation_rect" : [ 106.5, 908.5, 80.0, 21.0 ],
 													"text" : "(default: 256)",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -13992,7 +13559,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 99.0, 669.5, 722.0, 21.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 94.0, 700.5, 80.0, 21.0 ],
+													"presentation_rect" : [ 94.0, 714.5, 80.0, 21.0 ],
 													"text" : "(default: 256)",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -14025,7 +13592,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 35.638702000000002, 837.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 893.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 34.638702000000002, 907.5, 584.0, 22.0 ],
 													"text" : "snramp [int]",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -14043,7 +13610,7 @@
 													"patching_rect" : [ 25.0, 877.0, 492.0, 45.0 ],
 													"presentation" : 1,
 													"presentation_linecount" : 2,
-													"presentation_rect" : [ 24.0, 933.0, 666.0, 32.0 ],
+													"presentation_rect" : [ 24.0, 947.0, 666.0, 32.0 ],
 													"text" : "Sets the fade time for 'switch & ramp' independently of the off-line ramp time set via ramp. Switch & ramp declicks instantaneous changes at the playback, primarily when jumping around the buffer arbitrarily.",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -14061,7 +13628,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 11.0, 834.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 890.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 904.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -14078,7 +13645,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 15.638702, 841.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 897.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 14.638702, 911.0, 23.0, 18.0 ],
 													"text" : "@",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -14096,7 +13663,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 18.138701999999999, 841.0, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 17.138701999999999, 897.0, 15.0, 15.0 ],
+													"presentation_rect" : [ 17.138701999999999, 911.0, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -14112,7 +13679,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 35.638702000000002, 753.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 816.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 34.638702000000002, 830.5, 584.0, 22.0 ],
 													"text" : "report [int]",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -14128,8 +13695,8 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 25.0, 793.0, 486.0, 19.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 24.0, 856.0, 663.0, 19.0 ],
-													"text" : "Sets the report time for the list output.",
+													"presentation_rect" : [ 24.0, 870.0, 663.0, 19.0 ],
+													"text" : "Sets the report time in milliseconds for the list output.",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
 
@@ -14146,7 +13713,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 11.0, 750.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 813.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 827.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -14163,7 +13730,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 15.638702, 757.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 820.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 14.638702, 834.0, 23.0, 18.0 ],
 													"text" : "@",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -14181,7 +13748,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 18.138701999999999, 757.0, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 17.138701999999999, 820.0, 15.0, 15.0 ],
+													"presentation_rect" : [ 17.138701999999999, 834.0, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -14197,7 +13764,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 35.638702000000002, 671.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 699.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 34.638702000000002, 713.5, 584.0, 22.0 ],
 													"text" : "ramp [int]",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -14215,7 +13782,7 @@
 													"patching_rect" : [ 25.0, 711.0, 486.0, 84.0 ],
 													"presentation" : 1,
 													"presentation_linecount" : 4,
-													"presentation_rect" : [ 24.0, 739.0, 685.0, 58.0 ],
+													"presentation_rect" : [ 24.0, 753.0, 685.0, 58.0 ],
 													"text" : "Sets the 'offline' ramp fade time. These are the cosine-based ramps which happen outside the direction of travel of the playhead to declick the recording, as well as a real-time fade at the record-input to declick the recording outside realtime awareness. Since the record-head trails the play-head by 1 sample, the cosine-fades are never heard during their creation, only after the playhead loops around or changes direction to go over them.",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -14233,7 +13800,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 11.0, 668.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 696.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 710.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -14250,7 +13817,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 15.638702, 675.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 703.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 14.638702, 717.0, 23.0, 18.0 ],
 													"text" : "@",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -14268,7 +13835,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 18.138701999999999, 675.0, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 17.138701999999999, 703.0, 15.0, 15.0 ],
+													"presentation_rect" : [ 17.138701999999999, 717.0, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -14285,7 +13852,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 97.638701999999995, 519.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 989.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 14.638702, 1003.0, 23.0, 18.0 ],
 													"text" : "@",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -14303,7 +13870,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 100.138701999999995, 519.0, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 17.138701999999999, 989.0, 15.0, 15.0 ],
+													"presentation_rect" : [ 17.138701999999999, 1003.0, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -14321,7 +13888,7 @@
 													"patching_rect" : [ 23.0, 759.0, 948.0, 158.0 ],
 													"presentation" : 1,
 													"presentation_linecount" : 10,
-													"presentation_rect" : [ 24.0, 1027.0, 677.0, 158.0 ],
+													"presentation_rect" : [ 24.0, 1041.0, 677.0, 158.0 ],
 													"text" : "Applies easing functions to the switch & ramp algorithm to allow for different in and out curves.\n\nThe different possibilities for 'snrcurv' are:\n0 = linear ramp\n1 = sine-based ramp\n2 = cubic ease in ramp\n3 = cubic ease out ramp\n4 = exponential ease in ramp\n5 = exponential ease out ramp\n6 = exponential ease in and out",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -14337,7 +13904,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 33.638702000000002, 686.5, 817.0, 22.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 34.638702000000002, 985.5, 584.0, 22.0 ],
+													"presentation_rect" : [ 34.638702000000002, 999.5, 584.0, 22.0 ],
 													"text" : "snrcurve [int]",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
@@ -14355,7 +13922,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 9.0, 683.0, 485.0, 70.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 10.0, 982.0, 714.0, 30.0 ],
+													"presentation_rect" : [ 10.0, 996.0, 714.0, 30.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -14372,7 +13939,7 @@
 													"patching_rect" : [ 33.638702000000002, 600.5, 817.0, 22.0 ],
 													"presentation" : 1,
 													"presentation_rect" : [ 34.638702000000002, 582.5, 584.0, 22.0 ],
-													"text" : "interpflag [int]",
+													"text" : "interp [int]",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
 
@@ -14388,9 +13955,9 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 23.0, 640.0, 486.0, 84.0 ],
 													"presentation" : 1,
-													"presentation_linecount" : 4,
-													"presentation_rect" : [ 24.0, 622.0, 667.0, 58.0 ],
-													"text" : "Sets the interpolation mode during playback. A setting of 'interp 0' will only allow linear-interp to happen at all times. The default setting of 'interp 1' will use linear interpolation for playback while recording and cubic interpolation during regular playback. This is most noticable when switching between overdub and playback and slower playback speeds as you can hear the aliasing more with playback that uses linear interpolation. ",
+													"presentation_linecount" : 5,
+													"presentation_rect" : [ 24.0, 622.0, 667.0, 71.0 ],
+													"text" : "Sets the interpolation mode during playback. A setting of 'interp 0' will only allow linear-interp to happen at all times. The default setting of 'interp 1' will use linear interpolation for playback while recording and cubic interpolation during regular playback. This is most noticable when switching between overdub and playback and slower playback speeds as you can hear the aliasing more with playback that uses linear interpolation. 'interp 2' is the same as '1' but for spline interpolation.",
 													"textcolor" : [ 0.239216, 0.254902, 0.278431, 1.0 ]
 												}
 
@@ -14566,7 +14133,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 32.0, 259.0, 23.0, 18.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 14.638702, 1281.0, 23.0, 18.0 ],
+													"presentation_rect" : [ 14.638702, 1295.0, 23.0, 18.0 ],
 													"text" : "M",
 													"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 												}
@@ -14584,7 +14151,7 @@
 													"numoutlets" : 0,
 													"patching_rect" : [ 33.5, 259.25, 15.0, 15.0 ],
 													"presentation" : 1,
-													"presentation_rect" : [ 16.138701999999999, 1281.25, 15.0, 15.0 ],
+													"presentation_rect" : [ 16.138701999999999, 1295.25, 15.0, 15.0 ],
 													"proportion" : 0.39,
 													"rounded" : 0
 												}
@@ -27586,7 +27153,7 @@
  ]
 													}
 ,
-													"patching_rect" : [ 797.280518000000029, 391.627808000000016, 61.0, 22.0 ],
+													"patching_rect" : [ 795.036620999999968, 383.627808000000016, 61.0, 22.0 ],
 													"saved_object_attributes" : 													{
 														"description" : "",
 														"digest" : "",
@@ -27679,7 +27246,7 @@
 													"numinlets" : 1,
 													"numoutlets" : 7,
 													"outlettype" : [ "float", "int", "int", "float", "float", "float", "int" ],
-													"patching_rect" : [ 522.036620999999968, 391.627808000000016, 139.0, 22.0 ],
+													"patching_rect" : [ 523.036620999999968, 383.627808000000016, 138.0, 22.0 ],
 													"text" : "unpack f i i f f f i"
 												}
 
@@ -27943,7 +27510,7 @@
 , 											{
 												"patchline" : 												{
 													"destination" : [ "obj-17", 1 ],
-													"midpoints" : [ 611.536620999999968, 421.218688999999983, 611.036620999999968, 421.218688999999983 ],
+													"midpoints" : [ 611.869954333333339, 421.218688999999983, 611.036620999999968, 421.218688999999983 ],
 													"source" : [ "obj-18", 4 ]
 												}
 
@@ -27951,7 +27518,7 @@
 , 											{
 												"patchline" : 												{
 													"destination" : [ "obj-17", 0 ],
-													"midpoints" : [ 591.536620999999968, 421.218688999999983, 532.536620999999968, 421.218688999999983 ],
+													"midpoints" : [ 592.036620999999968, 421.218688999999983, 532.536620999999968, 421.218688999999983 ],
 													"source" : [ "obj-18", 3 ]
 												}
 
@@ -27959,7 +27526,7 @@
 , 											{
 												"patchline" : 												{
 													"destination" : [ "obj-8", 0 ],
-													"midpoints" : [ 531.536620999999968, 421.21875, 532.536620999999968, 421.21875 ],
+													"midpoints" : [ 532.536620999999968, 421.21875, 532.536620999999968, 421.21875 ],
 													"source" : [ "obj-18", 0 ]
 												}
 
@@ -27967,7 +27534,7 @@
 , 											{
 												"patchline" : 												{
 													"destination" : [ "obj-18", 0 ],
-													"midpoints" : [ 220.355896000000001, 381.20107999999999, 531.536620999999968, 381.20107999999999 ],
+													"midpoints" : [ 220.355896000000001, 378.201080499999989, 532.536620999999968, 378.201080499999989 ],
 													"source" : [ "obj-2", 1 ]
 												}
 
@@ -28061,7 +27628,7 @@
 , 											{
 												"patchline" : 												{
 													"destination" : [ "obj-16", 1 ],
-													"midpoints" : [ 827.780518000000029, 415.718719000000021, 846.536620999999968, 415.718719000000021 ],
+													"midpoints" : [ 825.536620999999968, 410.21871950000002, 846.536620999999968, 410.21871950000002 ],
 													"source" : [ "obj-5", 1 ]
 												}
 
@@ -28069,7 +27636,7 @@
 , 											{
 												"patchline" : 												{
 													"destination" : [ "obj-16", 0 ],
-													"midpoints" : [ 806.780518000000029, 421.218688999999983, 530.536620999999968, 421.218688999999983 ],
+													"midpoints" : [ 804.536620999999968, 410.21871950000002, 530.536620999999968, 410.21871950000002 ],
 													"source" : [ "obj-5", 0 ]
 												}
 
@@ -28077,7 +27644,7 @@
 , 											{
 												"patchline" : 												{
 													"destination" : [ "obj-42", 1 ],
-													"midpoints" : [ 848.780518000000029, 421.218688999999983, 846.536620999999968, 421.218688999999983 ],
+													"midpoints" : [ 846.536620999999968, 421.218688999999983, 846.536620999999968, 421.218688999999983 ],
 													"source" : [ "obj-5", 2 ]
 												}
 
@@ -32160,7 +31727,7 @@
 								"patchline" : 								{
 									"destination" : [ "obj-26", 0 ],
 									"hidden" : 1,
-									"midpoints" : [ 896.217203666666592, 746.063598999999954, 536.460570999999959, 746.063598999999954, 536.460570999999959, 674.063598999999954, 555.641479000000004, 674.063598999999954 ],
+									"midpoints" : [ 896.217203666666592, 741.063598999999954, 536.460570999999959, 741.063598999999954, 536.460570999999959, 674.063598999999954, 555.641479000000004, 674.063598999999954 ],
 									"source" : [ "obj-3", 1 ]
 								}
 
@@ -33478,7 +33045,7 @@
 									"numinlets" : 1,
 									"numoutlets" : 7,
 									"outlettype" : [ "float", "int", "int", "float", "float", "float", "int" ],
-									"patching_rect" : [ 236.388733000000002, 502.858703999999989, 136.0, 22.0 ],
+									"patching_rect" : [ 236.388733000000002, 502.858703999999989, 137.0, 22.0 ],
 									"text" : "unpack f i i f f f i"
 								}
 
@@ -33917,7 +33484,7 @@
 , 							{
 								"patchline" : 								{
 									"destination" : [ "obj-72", 1 ],
-									"midpoints" : [ 323.888733000000002, 532.449584999999956, 324.388733000000002, 532.449584999999956 ],
+									"midpoints" : [ 324.555399666666688, 532.449584999999956, 324.388733000000002, 532.449584999999956 ],
 									"source" : [ "obj-21", 4 ]
 								}
 
@@ -33925,7 +33492,7 @@
 , 							{
 								"patchline" : 								{
 									"destination" : [ "obj-72", 0 ],
-									"midpoints" : [ 304.388733000000002, 532.449584999999956, 245.888733000000002, 532.449584999999956 ],
+									"midpoints" : [ 304.888733000000002, 532.449584999999956, 245.888733000000002, 532.449584999999956 ],
 									"source" : [ "obj-21", 3 ]
 								}
 
@@ -34113,11 +33680,10 @@
 								"box" : 								{
 									"align" : 1,
 									"allowdrag" : 0,
+									"arrow" : 0,
 									"id" : "obj-5",
-									"ignoreclick" : 1,
 									"items" : [ "stop", ",", "play", ",", "record", ",", "overdub", ",", "append", ",", "initial" ],
 									"maxclass" : "umenu",
-									"menumode" : 2,
 									"numinlets" : 1,
 									"numoutlets" : 3,
 									"outlettype" : [ "int", "", "" ],
@@ -37829,7 +37395,7 @@
 									"numinlets" : 1,
 									"numoutlets" : 7,
 									"outlettype" : [ "float", "int", "int", "float", "float", "float", "int" ],
-									"patching_rect" : [ 236.55633499999999, 519.358703999999989, 136.0, 22.0 ],
+									"patching_rect" : [ 236.55633499999999, 519.358703999999989, 138.0, 22.0 ],
 									"text" : "unpack f i i f f f i"
 								}
 
@@ -38492,7 +38058,7 @@
 , 							{
 								"patchline" : 								{
 									"destination" : [ "obj-72", 1 ],
-									"midpoints" : [ 324.05633499999999, 548.949584999999956, 325.55633499999999, 548.949584999999956 ],
+									"midpoints" : [ 325.389668333333304, 548.949584999999956, 325.55633499999999, 548.949584999999956 ],
 									"source" : [ "obj-18", 4 ]
 								}
 
@@ -38500,7 +38066,7 @@
 , 							{
 								"patchline" : 								{
 									"destination" : [ "obj-72", 0 ],
-									"midpoints" : [ 304.55633499999999, 548.949584999999956, 247.05633499999999, 548.949584999999956 ],
+									"midpoints" : [ 305.55633499999999, 548.949584999999956, 247.05633499999999, 548.949584999999956 ],
 									"source" : [ "obj-18", 3 ]
 								}
 
@@ -38845,7 +38411,7 @@
 									"numinlets" : 1,
 									"numoutlets" : 7,
 									"outlettype" : [ "float", "int", "int", "float", "float", "float", "int" ],
-									"patching_rect" : [ 289.388733000000002, 503.858703999999989, 136.0, 22.0 ],
+									"patching_rect" : [ 289.388733000000002, 503.858703999999989, 137.0, 22.0 ],
 									"text" : "unpack f i i f f f i"
 								}
 
@@ -39415,7 +38981,7 @@
 , 							{
 								"patchline" : 								{
 									"destination" : [ "obj-14", 1 ],
-									"midpoints" : [ 376.888733000000002, 533.44964600000003, 377.388762999999983, 533.44964600000003 ],
+									"midpoints" : [ 377.555399666666688, 533.44964600000003, 377.388762999999983, 533.44964600000003 ],
 									"source" : [ "obj-21", 4 ]
 								}
 
@@ -39423,7 +38989,7 @@
 , 							{
 								"patchline" : 								{
 									"destination" : [ "obj-14", 0 ],
-									"midpoints" : [ 357.388733000000002, 533.44964600000003, 298.888762999999983, 533.44964600000003 ],
+									"midpoints" : [ 357.888733000000002, 533.44964600000003, 298.888762999999983, 533.44964600000003 ],
 									"source" : [ "obj-21", 3 ]
 								}
 

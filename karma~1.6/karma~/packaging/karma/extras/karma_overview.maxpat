@@ -74,7 +74,6 @@
 					"numinlets" : 1,
 					"numoutlets" : 0,
 					"patching_rect" : [ 633.562292599999978, 445.188660000000027, 155.0, 108.0 ],
-					"presentation_linecount" : 7,
 					"text" : "current position (0. to 1.)\nplay state (int)\nrecord state (int)\nstart position (ms)\nend position (ms)\nwindow size (ms)\ncurrent state (int)",
 					"textcolor" : [ 1.0, 1.0, 1.0, 1.0 ]
 				}
@@ -117,7 +116,6 @@
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
 					"patching_rect" : [ 562.933471000000168, 714.063598999999954, 202.0, 52.0 ],
-					"presentation_linecount" : 3,
 					"text" : ";\rmax launchbrowser http://www.rodrigoconstanzo.com"
 				}
 
@@ -161,7 +159,6 @@
 					"numinlets" : 1,
 					"numoutlets" : 0,
 					"patching_rect" : [ 770.842529000000127, 714.063598999999954, 219.0, 36.0 ],
-					"presentation_linecount" : 2,
 					"text" : "designed by Rodrigo Constanzo\ncoded by raja, small extras by pete",
 					"textjustification" : 2
 				}
@@ -3264,7 +3261,7 @@
 				"box" : 				{
 					"attr_bpm" : 133.990004999999996,
 					"bgcolor" : [ 0.0, 0.0, 0.0, 1.0 ],
-					"buffername" : "kitchen_sink",
+					"buffername" : "kitchen_sink_ov",
 					"grid" : 0.0,
 					"gridcolor" : [ 0.392, 0.392, 0.392, 1.0 ],
 					"id" : "obj-87",
@@ -3291,8 +3288,8 @@
 					"numinlets" : 1,
 					"numoutlets" : 2,
 					"outlettype" : [ "float", "bang" ],
-					"patching_rect" : [ 46.726134999999999, 670.952026000000046, 154.0, 22.0 ],
-					"text" : "buffer~ kitchen_sink 60000"
+					"patching_rect" : [ 46.726134999999999, 670.952026000000046, 171.0, 22.0 ],
+					"text" : "buffer~ kitchen_sink_ov 60000"
 				}
 
 			}
@@ -3363,7 +3360,7 @@
 					"numoutlets" : 2,
 					"outlettype" : [ "signal", "list" ],
 					"patching_rect" : [ 46.726134999999999, 367.005248999999992, 176.374084000000011, 22.0 ],
-					"text" : "karma~ kitchen_sink"
+					"text" : "karma~ kitchen_sink_ov"
 				}
 
 			}
