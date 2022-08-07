@@ -4,3 +4,47 @@ karma~(b)/karma~.mxo/Contents/Info.plist
 karma~(b)/karma~.mxo/Contents/PkgInfo
 karma~.mxo/Contents/Info.plist
 karma~.mxo/Contents/PkgInfo
+
+# Apple Finder Database
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Microsoft VS
+
+*.sdf
+*.suo
+*.user
+*.sln.docstates
+.vs/
+
+# XCode
+
+*.mode1
+*.mode2v3
+*.mode1v3
+*.pbxuser
+*.perspectivev3
+*.xcuserstate
+*xcuserdata
+xcuserdata/
+
+!default.pbxuser
+!default.mode1
+!default.mode1v3
+!default.mode2v3
+!default.perspectivev3
+
+# Windows Build Directories / Files
+
+*.db
+*.ipch
+*.ipch
+*.iobj
+*.ipdb
+build/
