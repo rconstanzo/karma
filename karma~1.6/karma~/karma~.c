@@ -18,7 +18,7 @@
     karma
  
     @author
-    raja (original to version 1.4) & pete (version 1.5)
+    raja (original to version 1.4) & pete (version 1.5 and 1.6)
     
     @digest
     Varispeed Audio Looper
@@ -44,12 +44,12 @@
  */
 
 
-//  //  //  karma~ version 1.5 by pete, basically karma~ version 1.4 by raja...
+//  //  //  karma~ version 1.6 by pete, basically karma~ version 1.4 by raja...
 //  //  //  ...with some bug fixes and code refactoring
 //  //  //  November 2017
 //  //  //  N.B. - [at]-commenting for 'DoctorMax' auto documentation
 
-//  //  //  TODO version 1.5:
+//  //  //  TODO version 1.6:
 //  //  //  fix: a bunch of bugs & stuff, incl. ...
 //  //  //  - perform loop in/out updating relating to inability to call multiple methods to the object ...
 //  //  //  ... by using comma-separated message boxes (etc) <<-- big bug, probably unfixable until version 2 rewrite
@@ -592,13 +592,14 @@ void ext_main(void *r)
     ps_originalloop = gensym("reset");
 
     // identify build
-    post("--");
+/*  post("--");
     post("karma~:");
     post("version 1.6 beta");
     post("designed by Rodrigo Constanzo");
     post("original version to 1.4 developed by raja");
     post("1.5 and 1.6 updates by pete");
     post("--");
+*/
 }
 
 void *karma_new(t_symbol *s, short argc, t_atom *argv)
