@@ -3398,8 +3398,8 @@
 					"numinlets" : 2,
 					"numoutlets" : 1,
 					"outlettype" : [ "" ],
-					"patching_rect" : [ 318.726134999999999, 732.063598999999954, 126.0, 22.0 ],
-					"text" : "load karma~.maxhelp"
+					"patching_rect" : [ 318.726134999999999, 732.063598999999954, 75.0, 22.0 ],
+					"text" : "help karma~"
 				}
 
 			}
