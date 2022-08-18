@@ -3,14 +3,14 @@
 		"fileversion" : 1,
 		"appversion" : 		{
 			"major" : 8,
-			"minor" : 5,
-			"revision" : 0,
+			"minor" : 3,
+			"revision" : 1,
 			"architecture" : "x64",
 			"modernui" : 1
 		}
 ,
 		"classnamespace" : "box",
-		"rect" : [ 34.0, 100.0, 1056.0, 769.0 ],
+		"rect" : [ 273.0, 114.0, 1056.0, 769.0 ],
 		"bglocked" : 0,
 		"openinpresentation" : 0,
 		"default_fontsize" : 12.0,
@@ -72,8 +72,8 @@
 						"fileversion" : 1,
 						"appversion" : 						{
 							"major" : 8,
-							"minor" : 5,
-							"revision" : 0,
+							"minor" : 3,
+							"revision" : 1,
 							"architecture" : "x64",
 							"modernui" : 1
 						}
@@ -119,8 +119,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -873,12 +873,13 @@
 								"box" : 								{
 									"bubble" : 1,
 									"bubblepoint" : 0.1,
+									"fontsize" : 13.0,
 									"id" : "obj-4",
 									"linecount" : 3,
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 207.0, 444.358703999999989, 166.0, 51.0 ],
+									"patching_rect" : [ 207.0, 444.358703999999989, 178.0, 54.0 ],
 									"text" : "signal rate sync output for driving other processes sample accurately"
 								}
 
@@ -1112,13 +1113,13 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 48.0,
 									"id" : "obj-6",
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 10.0, 10.0, 486.0, 60.0 ],
+									"patching_rect" : [ 10.0, 6.0, 472.0, 64.0 ],
 									"text" : "karma~"
 								}
 
@@ -1484,8 +1485,8 @@
 						"fileversion" : 1,
 						"appversion" : 						{
 							"major" : 8,
-							"minor" : 5,
-							"revision" : 0,
+							"minor" : 3,
+							"revision" : 1,
 							"architecture" : "x64",
 							"modernui" : 1
 						}
@@ -1531,8 +1532,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -2507,13 +2508,13 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 48.0,
 									"id" : "obj-6",
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 10.0, 10.0, 486.0, 60.0 ],
+									"patching_rect" : [ 10.0, 6.0, 472.0, 64.0 ],
 									"text" : "karma~"
 								}
 
@@ -2925,8 +2926,8 @@
 						"fileversion" : 1,
 						"appversion" : 						{
 							"major" : 8,
-							"minor" : 5,
-							"revision" : 0,
+							"minor" : 3,
+							"revision" : 1,
 							"architecture" : "x64",
 							"modernui" : 1
 						}
@@ -3171,13 +3172,13 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 48.0,
 									"id" : "obj-19",
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 552.974365000000034, 10.0, 247.0, 60.0 ],
+									"patching_rect" : [ 552.974365000000034, 6.0, 239.0, 64.0 ],
 									"text" : "mc.karma~"
 								}
 
@@ -3434,7 +3435,7 @@
 								"box" : 								{
 									"angle" : 270.0,
 									"arrow_orientation" : 1,
-									"bgcolor" : [ 0.8, 0.8, 0.8, 1.0 ],
+									"bgcolor" : [ 0.425432682037354, 0.425419926643372, 0.425427138805389, 1.0 ],
 									"id" : "obj-126",
 									"maxclass" : "panel",
 									"mode" : 0,
@@ -3448,28 +3449,28 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 13.0,
 									"id" : "obj-128",
 									"linecount" : 2,
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 222.050536999999991, 391.0, 201.0, 36.0 ],
+									"patching_rect" : [ 222.050536999999991, 391.0, 201.0, 38.0 ],
 									"text" : "buffer-name (symbol)\nnumber-of-outputs (int) (optional)",
-									"textcolor" : [ 0.426676, 0.426663, 0.42667, 1.0 ]
+									"textcolor" : [ 0.847058823529412, 0.847058823529412, 0.847058823529412, 1.0 ]
 								}
 
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 13.0,
 									"id" : "obj-129",
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 222.141479000000004, 376.454589999999996, 116.0, 21.0 ],
+									"patching_rect" : [ 222.141479000000004, 376.454589999999996, 115.0, 22.0 ],
 									"text" : "Arguments:",
 									"textcolor" : [ 0.150563, 0.150559, 0.150561, 1.0 ]
 								}
@@ -3479,7 +3480,7 @@
 								"box" : 								{
 									"angle" : 270.0,
 									"arrow_orientation" : 1,
-									"bgcolor" : [ 0.8, 0.8, 0.8, 1.0 ],
+									"bgcolor" : [ 0.425432682037354, 0.425419926643372, 0.425427138805389, 1.0 ],
 									"id" : "obj-130",
 									"maxclass" : "panel",
 									"mode" : 0,
@@ -3522,11 +3523,11 @@
 									"fontname" : "Arial",
 									"fontsize" : 13.0,
 									"id" : "obj-85",
-									"linecount" : 10,
+									"linecount" : 9,
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 10.0, 71.0, 486.0, 152.0 ],
+									"patching_rect" : [ 10.0, 71.0, 508.0, 137.0 ],
 									"text" : "By default karma~ has one audio inlet/outlet, one (optional) speed inlet, and one list outlet. Setting a channel argument (up to 4) will create additional audio inlets/outlets.\n\nIf a stereo buffer is loaded into a mono object, only the left channel is used. If a mono buffer is loaded into a stereo object, audio only comes out of the left channel. This is extrapolated out to four channels as well.\n\nYou can change the buffer that karma~ addresses dynamically with the set message, including changing buffers while the object is playing back audio.",
 									"textcolor" : [ 0.426676, 0.426663, 0.42667, 1.0 ]
 								}
@@ -3534,13 +3535,13 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 48.0,
 									"id" : "obj-6",
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 10.0, 10.0, 486.0, 60.0 ],
+									"patching_rect" : [ 10.0, 6.0, 472.0, 64.0 ],
 									"text" : "karma~"
 								}
 
@@ -4189,8 +4190,8 @@
 						"fileversion" : 1,
 						"appversion" : 						{
 							"major" : 8,
-							"minor" : 5,
-							"revision" : 0,
+							"minor" : 3,
+							"revision" : 1,
 							"architecture" : "x64",
 							"modernui" : 1
 						}
@@ -4240,8 +4241,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -4447,8 +4448,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -4841,8 +4842,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -5281,8 +5282,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -5791,8 +5792,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -5904,8 +5905,8 @@
 																		"fileversion" : 1,
 																		"appversion" : 																		{
 																			"major" : 8,
-																			"minor" : 5,
-																			"revision" : 0,
+																			"minor" : 3,
+																			"revision" : 1,
 																			"architecture" : "x64",
 																			"modernui" : 1
 																		}
@@ -6572,8 +6573,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -6685,8 +6686,8 @@
 																		"fileversion" : 1,
 																		"appversion" : 																		{
 																			"major" : 8,
-																			"minor" : 5,
-																			"revision" : 0,
+																			"minor" : 3,
+																			"revision" : 1,
 																			"architecture" : "x64",
 																			"modernui" : 1
 																		}
@@ -7446,8 +7447,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -7559,8 +7560,8 @@
 																		"fileversion" : 1,
 																		"appversion" : 																		{
 																			"major" : 8,
-																			"minor" : 5,
-																			"revision" : 0,
+																			"minor" : 3,
+																			"revision" : 1,
 																			"architecture" : "x64",
 																			"modernui" : 1
 																		}
@@ -8357,8 +8358,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -8569,8 +8570,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -8820,8 +8821,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -9265,8 +9266,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -9327,8 +9328,8 @@
 																		"fileversion" : 1,
 																		"appversion" : 																		{
 																			"major" : 8,
-																			"minor" : 5,
-																			"revision" : 0,
+																			"minor" : 3,
+																			"revision" : 1,
 																			"architecture" : "x64",
 																			"modernui" : 1
 																		}
@@ -9784,8 +9785,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -9952,8 +9953,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -10579,8 +10580,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -11041,8 +11042,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -11103,8 +11104,8 @@
 																		"fileversion" : 1,
 																		"appversion" : 																		{
 																			"major" : 8,
-																			"minor" : 5,
-																			"revision" : 0,
+																			"minor" : 3,
+																			"revision" : 1,
 																			"architecture" : "x64",
 																			"modernui" : 1
 																		}
@@ -11633,8 +11634,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -11801,8 +11802,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -12440,8 +12441,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -14010,8 +14011,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -16201,8 +16202,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -16428,8 +16429,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -16821,8 +16822,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -17377,8 +17378,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -17509,8 +17510,8 @@
 																		"fileversion" : 1,
 																		"appversion" : 																		{
 																			"major" : 8,
-																			"minor" : 5,
-																			"revision" : 0,
+																			"minor" : 3,
+																			"revision" : 1,
 																			"architecture" : "x64",
 																			"modernui" : 1
 																		}
@@ -18344,8 +18345,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -18458,8 +18459,8 @@
 																		"fileversion" : 1,
 																		"appversion" : 																		{
 																			"major" : 8,
-																			"minor" : 5,
-																			"revision" : 0,
+																			"minor" : 3,
+																			"revision" : 1,
 																			"architecture" : "x64",
 																			"modernui" : 1
 																		}
@@ -20043,8 +20044,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -20148,8 +20149,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -20579,8 +20580,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -21162,8 +21163,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -21248,8 +21249,8 @@
 																		"fileversion" : 1,
 																		"appversion" : 																		{
 																			"major" : 8,
-																			"minor" : 5,
-																			"revision" : 0,
+																			"minor" : 3,
+																			"revision" : 1,
 																			"architecture" : "x64",
 																			"modernui" : 1
 																		}
@@ -22644,8 +22645,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -22899,8 +22900,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -23291,8 +23292,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -23815,8 +23816,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -23947,8 +23948,8 @@
 																		"fileversion" : 1,
 																		"appversion" : 																		{
 																			"major" : 8,
-																			"minor" : 5,
-																			"revision" : 0,
+																			"minor" : 3,
+																			"revision" : 1,
 																			"architecture" : "x64",
 																			"modernui" : 1
 																		}
@@ -24782,8 +24783,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -24895,8 +24896,8 @@
 																		"fileversion" : 1,
 																		"appversion" : 																		{
 																			"major" : 8,
-																			"minor" : 5,
-																			"revision" : 0,
+																			"minor" : 3,
+																			"revision" : 1,
 																			"architecture" : "x64",
 																			"modernui" : 1
 																		}
@@ -26464,8 +26465,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -26527,8 +26528,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -26965,8 +26966,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -27345,8 +27346,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -27901,8 +27902,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -28014,8 +28015,8 @@
 																		"fileversion" : 1,
 																		"appversion" : 																		{
 																			"major" : 8,
-																			"minor" : 5,
-																			"revision" : 0,
+																			"minor" : 3,
+																			"revision" : 1,
 																			"architecture" : "x64",
 																			"modernui" : 1
 																		}
@@ -29478,8 +29479,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -29621,8 +29622,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -30584,8 +30585,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -30795,8 +30796,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -32174,13 +32175,13 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 48.0,
 									"id" : "obj-6",
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 10.0, 10.0, 486.0, 60.0 ],
+									"patching_rect" : [ 10.0, 6.0, 472.0, 64.0 ],
 									"text" : "karma~"
 								}
 
@@ -32307,8 +32308,8 @@
 						"fileversion" : 1,
 						"appversion" : 						{
 							"major" : 8,
-							"minor" : 5,
-							"revision" : 0,
+							"minor" : 3,
+							"revision" : 1,
 							"architecture" : "x64",
 							"modernui" : 1
 						}
@@ -32354,8 +32355,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -33069,16 +33070,16 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 13.0,
 									"id" : "obj-128",
 									"linecount" : 6,
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 744.419983000000002, 482.522887999999966, 201.0, 94.0 ],
+									"patching_rect" : [ 744.419983000000002, 482.522887999999966, 206.0, 100.0 ],
 									"text" : "A single value sets the loop from zero to that point. Two values sets the loop length between those points. resetloop returns to the loop defined by the initial record message.",
-									"textcolor" : [ 0.426676, 0.426663, 0.42667, 1.0 ]
+									"textcolor" : [ 0.847058823529412, 0.847058823529412, 0.847058823529412, 1.0 ]
 								}
 
 							}
@@ -33086,13 +33087,13 @@
 								"box" : 								{
 									"angle" : 270.0,
 									"arrow_orientation" : 1,
-									"bgcolor" : [ 0.8, 0.8, 0.8, 1.0 ],
+									"bgcolor" : [ 0.425432682037354, 0.425419926643372, 0.425427138805389, 1.0 ],
 									"id" : "obj-130",
 									"maxclass" : "panel",
 									"mode" : 0,
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 741.0, 477.005248999999992, 207.839966000000004, 105.035278000000005 ],
+									"patching_rect" : [ 741.0, 477.005248999999992, 209.419983000000002, 110.035278000000005 ],
 									"proportion" : 0.39
 								}
 
@@ -33510,13 +33511,13 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 48.0,
 									"id" : "obj-6",
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 10.0, 10.0, 486.0, 60.0 ],
+									"patching_rect" : [ 10.0, 6.0, 472.0, 64.0 ],
 									"text" : "karma~"
 								}
 
@@ -33910,8 +33911,8 @@
 						"fileversion" : 1,
 						"appversion" : 						{
 							"major" : 8,
-							"minor" : 5,
-							"revision" : 0,
+							"minor" : 3,
+							"revision" : 1,
 							"architecture" : "x64",
 							"modernui" : 1
 						}
@@ -33958,8 +33959,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -34786,9 +34787,9 @@
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 637.388733000000002, 162.520263999999997, 321.0, 442.0 ],
+									"patching_rect" : [ 637.388733000000002, 162.520263999999997, 322.0, 442.0 ],
 									"text" : "Hit RECORD to begin recording a new loop.\n\nIf you end the loop by hitting RECORD, the loop will begin playing in OVERDUB mode.\n\nIf you end the loop by hitting PLAY, the loop will begin playing.\n\nIf you end the loop by hitting STOP, you define the loop length and stop playback.\n\n\nHit PLAY to begin playing the newly created loop.\n\nIf you hit RECORD, you will go into OVERDUB mode.\n\nIf you hit PLAY, you will begin playback from the start of the defined position/window..\n\nIf you hit STOP, you will stop playback.\n\n\nHit RECORD while playing loop to enter OVERDUB mode.\n\nIf you hit RECORD, you will go into PLAY mode.\n\nIf you hit PLAY, you will go into PLAY mode.\n\nIf you hit STOP, you will stop playback.",
-									"textcolor" : [ 0.426676, 0.426663, 0.42667, 1.0 ]
+									"textcolor" : [ 0.847058823529412, 0.847058823529412, 0.847058823529412, 1.0 ]
 								}
 
 							}
@@ -34989,13 +34990,13 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 48.0,
 									"id" : "obj-6",
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 10.0, 10.0, 486.0, 60.0 ],
+									"patching_rect" : [ 10.0, 6.0, 472.0, 64.0 ],
 									"text" : "karma~"
 								}
 
@@ -35003,7 +35004,7 @@
 , 							{
 								"box" : 								{
 									"angle" : 270.0,
-									"bgcolor" : [ 0.800000071525574, 0.800000071525574, 0.799999952316284, 1.0 ],
+									"bgcolor" : [ 0.425432682037354, 0.425419926643372, 0.425427138805389, 1.0 ],
 									"id" : "obj-26",
 									"maxclass" : "panel",
 									"mode" : 0,
@@ -35260,8 +35261,8 @@
 						"fileversion" : 1,
 						"appversion" : 						{
 							"major" : 8,
-							"minor" : 5,
-							"revision" : 0,
+							"minor" : 3,
+							"revision" : 1,
 							"architecture" : "x64",
 							"modernui" : 1
 						}
@@ -35307,8 +35308,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -36452,8 +36453,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -36584,8 +36585,8 @@
 														"fileversion" : 1,
 														"appversion" : 														{
 															"major" : 8,
-															"minor" : 5,
-															"revision" : 0,
+															"minor" : 3,
+															"revision" : 1,
 															"architecture" : "x64",
 															"modernui" : 1
 														}
@@ -37314,13 +37315,13 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 48.0,
 									"id" : "obj-6",
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 10.0, 10.0, 486.0, 60.0 ],
+									"patching_rect" : [ 10.0, 6.0, 472.0, 64.0 ],
 									"text" : "karma~"
 								}
 
@@ -37744,8 +37745,8 @@
 						"fileversion" : 1,
 						"appversion" : 						{
 							"major" : 8,
-							"minor" : 5,
-							"revision" : 0,
+							"minor" : 3,
+							"revision" : 1,
 							"architecture" : "x64",
 							"modernui" : 1
 						}
@@ -37791,8 +37792,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -38617,8 +38618,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -39091,8 +39092,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -39382,13 +39383,13 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 48.0,
 									"id" : "obj-6",
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 10.0, 10.0, 486.0, 60.0 ],
+									"patching_rect" : [ 10.0, 6.0, 472.0, 64.0 ],
 									"text" : "karma~"
 								}
 
@@ -39888,8 +39889,8 @@
 						"fileversion" : 1,
 						"appversion" : 						{
 							"major" : 8,
-							"minor" : 5,
-							"revision" : 0,
+							"minor" : 3,
+							"revision" : 1,
 							"architecture" : "x64",
 							"modernui" : 1
 						}
@@ -39935,8 +39936,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -40964,13 +40965,13 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 48.0,
 									"id" : "obj-6",
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 10.0, 10.0, 486.0, 60.0 ],
+									"patching_rect" : [ 10.0, 6.0, 472.0, 64.0 ],
 									"text" : "karma~"
 								}
 
@@ -41397,8 +41398,8 @@
 						"fileversion" : 1,
 						"appversion" : 						{
 							"major" : 8,
-							"minor" : 5,
-							"revision" : 0,
+							"minor" : 3,
+							"revision" : 1,
 							"architecture" : "x64",
 							"modernui" : 1
 						}
@@ -41444,8 +41445,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -42514,13 +42515,13 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 48.0,
 									"id" : "obj-6",
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 10.0, 10.0, 486.0, 60.0 ],
+									"patching_rect" : [ 10.0, 6.0, 472.0, 64.0 ],
 									"text" : "karma~"
 								}
 
@@ -42915,8 +42916,8 @@
 						"fileversion" : 1,
 						"appversion" : 						{
 							"major" : 8,
-							"minor" : 5,
-							"revision" : 0,
+							"minor" : 3,
+							"revision" : 1,
 							"architecture" : "x64",
 							"modernui" : 1
 						}
@@ -42981,14 +42982,14 @@
 						"fileversion" : 1,
 						"appversion" : 						{
 							"major" : 8,
-							"minor" : 5,
-							"revision" : 0,
+							"minor" : 3,
+							"revision" : 1,
 							"architecture" : "x64",
 							"modernui" : 1
 						}
 ,
 						"classnamespace" : "box",
-						"rect" : [ 34.0, 126.0, 1056.0, 743.0 ],
+						"rect" : [ 273.0, 140.0, 1056.0, 743.0 ],
 						"bglocked" : 0,
 						"openinpresentation" : 0,
 						"default_fontsize" : 12.0,
@@ -43045,8 +43046,8 @@
 										"fileversion" : 1,
 										"appversion" : 										{
 											"major" : 8,
-											"minor" : 5,
-											"revision" : 0,
+											"minor" : 3,
+											"revision" : 1,
 											"architecture" : "x64",
 											"modernui" : 1
 										}
@@ -44160,7 +44161,7 @@
 								"box" : 								{
 									"angle" : 270.0,
 									"arrow_orientation" : 1,
-									"bgcolor" : [ 0.8, 0.8, 0.8, 1.0 ],
+									"bgcolor" : [ 0.425432682037354, 0.425419926643372, 0.425427138805389, 1.0 ],
 									"id" : "obj-126",
 									"maxclass" : "panel",
 									"mode" : 0,
@@ -44174,28 +44175,28 @@
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 13.0,
 									"id" : "obj-128",
 									"linecount" : 7,
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 666.653234600000019, 485.020355000000109, 155.0, 108.0 ],
+									"patching_rect" : [ 666.653234600000019, 485.020355000000109, 155.0, 116.0 ],
 									"text" : "current position (0. to 1.)\nplay state (int)\nrecord state (int)\nstart position (ms)\nend position (ms)\nwindow size (ms)\ncurrent state (int)",
-									"textcolor" : [ 0.426676, 0.426663, 0.42667, 1.0 ]
+									"textcolor" : [ 0.847058823529412, 0.847058823529412, 0.847058823529412, 1.0 ]
 								}
 
 							}
 , 							{
 								"box" : 								{
-									"fontname" : "Arial",
+									"fontname" : "Lato",
 									"fontsize" : 13.0,
 									"id" : "obj-129",
 									"maxclass" : "comment",
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 666.653234600000019, 470.474943999999994, 116.0, 36.0 ],
+									"patching_rect" : [ 666.653234600000019, 470.474943999999994, 118.0, 38.0 ],
 									"text" : "7 element list out:\n",
 									"textcolor" : [ 0.0, 0.0, 0.0, 1.0 ]
 								}
@@ -44205,13 +44206,13 @@
 								"box" : 								{
 									"angle" : 270.0,
 									"arrow_orientation" : 1,
-									"bgcolor" : [ 0.8, 0.8, 0.8, 1.0 ],
+									"bgcolor" : [ 0.425432682037354, 0.425419926643372, 0.425427138805389, 1.0 ],
 									"id" : "obj-130",
 									"maxclass" : "panel",
 									"mode" : 0,
 									"numinlets" : 1,
 									"numoutlets" : 0,
-									"patching_rect" : [ 664.722326599999974, 469.336944000000017, 156.839966000000004, 123.683411000000035 ],
+									"patching_rect" : [ 664.722326599999974, 469.336944000000017, 156.930908000000045, 133.683411000000092 ],
 									"proportion" : 0.39
 								}
 
