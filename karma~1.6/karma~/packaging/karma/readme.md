@@ -5,8 +5,6 @@ The karma~ object is a dynamically lengthed varispeed sample-recording and playb
 
 Version 1.6 (current beta version):
 The mac version (.mxo) is a 64-bit UB2, working on both Intel and Apple Silicon machines, for Max 7 or later. The windows version comes in the form of a 64-bit Intel external (.mxe64), for Max 7 (64-bit) or Max 8 or later.
-!! NOTE !! The Windows versions are still version 1.1 and NOT updated with the new features - coming soon.
-
 
 ==================================
 

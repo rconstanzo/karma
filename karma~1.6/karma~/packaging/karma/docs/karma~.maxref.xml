@@ -81,11 +81,60 @@
               Playback Interpolation Type
         </digest>
         <description>
-              <p>Type of <b>interpolation</b> used in audio playback.
-              Available options: 0=<b>Linear</b>, 1=<b>Cubic</b>, 2=<b>Spline</b>
-              Default <b>Cubic</b></p>
+              <p>Sets the <b>interpolation</b> mode during playback. A setting of 'interp 0' will only allow linear-interp to happen at all times. The default setting of 'interp 1' will use linear interpolation for playback while recording and cubic interpolation during regular playback. This is most noticable when switching between overdub and playback and slower playback speeds as you can hear the aliasing more with playback that uses linear interpolation. 'interp 2' is the same as '1' but for spline interpolation.<br/><br/>
+              Available options: <br/>
+			  0 = <b>linear</b><br/>
+			  1 = <b>cubic</b><br/>
+			  2 = <b>spline</b><br/>
+              Default <b>cubic</b></p>
         </description>
       </attribute>
+
+      <attribute name='ramp' get='1' set='1' type='int' size='1'>
+        <digest>
+              Ramp Fade Time
+        </digest>
+        <description>
+              <p>Sets the 'offline' ramp fade time. These are the cosine-based ramps which happen outside the direction of travel of the playhead to declick the recording, as well as a real-time fade at the record-input to declick the recording outside realtime awareness. Since the record-head trails the play-head by 1 sample, the cosine-fades are never heard during their creation, only after the playhead loops around or changes direction to go over them.</p>
+        </description>
+      </attribute>
+
+	    <attribute name='report' get='1' set='1' type='int' size='1'>
+        <digest>
+              List Outlet Report Time
+        </digest>
+        <description>
+              <p>Sets the report time in milliseconds for the list output.</p>
+        </description>
+      </attribute>
+
+	  	<attribute name='snramp' get='1' set='1' type='int' size='1'>
+        <digest>
+              Switch and Ramp Fade Time
+        </digest>
+        <description>
+              <p>Sets the fade time for 'switch and ramp' independently of the off-line ramp time set via ramp. Switch and ramp declicks instantaneous changes at the playback, primarily when jumping around the buffer arbitrarily.</p>
+        </description>
+      </attribute>
+
+	  	<attribute name='sncurve' get='1' set='1' type='int' size='1'>
+        <digest>
+              Curve for Switch and Ramp Function
+        </digest>
+        <description>
+              <p>Applies easing functions to the switch and ramp algorithm to allow for different in and out curves.<br/>
+<br/>
+The different possibilities for 'snrcurv' are:<br/>
+0 = <b>linear ramp</b><br/>
+1 = <b>sine-based ramp</b><br/>
+2 = <b>cubic ease in ramp</b><br/>
+3 = <b>cubic ease out ramp</b><br/>
+4 = <b>exponential ease in ramp</b><br/>
+5 = <b>exponential ease out ramp</b><br/>
+6 = <b>exponential ease in and out</b></p>
+        </description>
+      </attribute>
+
       </attributelist>
 
 	<!--RELATED-->

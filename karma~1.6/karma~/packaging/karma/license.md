@@ -1,4 +1,4 @@
-karma~ by Rodrigo Constanzo & raja
+karma~ by Rodrigo Constanzo & raja & pete
 ==================================
 
 The karma~ object is a dynamically lengthed varispeed sample-recording and playback object with complex functionality, which references the audio information stored in a buffer~ object having the same name.
