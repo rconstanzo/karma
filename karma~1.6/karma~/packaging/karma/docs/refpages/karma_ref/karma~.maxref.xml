@@ -95,22 +95,13 @@
 	</objarglist>
 	<!--MESSAGES-->
       <methodlist>
-		<method name="(mouse)">
-                  <arglist />
-			<digest>
-				Open a file buffer display window
-			</digest>
-			<description>
-				Double-clicking on a <o>karma~</o> object opens the sample display window of the <o>buffer~</o> object currently associated with the <o>karma~</o> object.
-			</description>
-		</method>
             <method name="append">
                   <arglist />
                   <digest>
                         (get ready for) append recording
                   </digest>
                   <description>
-                        (get ready for) append recording to end of currently used segment (as long as <o>buffer~</o> space is available).
+                        Sending a message of <m>append</m> will put karma back in it's "initial loop creation" state, allowing for new defitions of the loop in/out points. From a stopped state, after creating an initial loop, sending an <m>append</m> message will show the whole <o>buffer~</o> in the GUI showing that the existing loop is ready to be appended. Hitting <m>record</m> will then begin recording where the loop previously ended. You can leave this append state by hitting <m>play</m>, <m>record</m>, or <m>stop</m>. If you send an <m>append</m> message while in a play state, you can play into a new part of the <o>buffer~</o>, and if you send an <m>append</m> message while in an overdub state, you can record into a new part of the buffer.
                   </description>
             </method>
             <method name="jump">
@@ -121,9 +112,18 @@
                         Jump location
                   </digest>
                   <description>
-                        Jump to location in current loop (in normalised segment length float 0..1).
+                        Jumps to a position in the defined sample (in normalized segment length float 0..1). If <o>karma~</o> is playing, jumping will immediately jump to the phase indicated by the incoming message and carry on playing. Jumping while overdubbing will jump to that position and carry on recording. Jumping while the object is stopped will set the start position for the next time the play message is received.
                   </description>
             </method>
+            <method name="(mouse)">
+                  <arglist />
+			<digest>
+				Open a file buffer display window
+			</digest>
+			<description>
+				Double-clicking on a <o>karma~</o> object opens the sample display window of the <o>buffer~</o> object currently associated with the <o>karma~</o> object.
+			</description>
+		</method>
             <method name="overdub">
 			<arglist>
 				<arg name="ARG_NAME_0" type="float" optional="0" />
@@ -132,7 +132,7 @@
                         Overdubbing amplitude
                   </digest>
                   <description>
-                        Amplitude (..0..1..) for when in overdubbing state.
+                        Sets the amount by which to multiply the material in the loop while overdubbing on to it. An <m>overdub</m> setting of 1.0 will keep the value of the loop the same while adding new material (it is possible to distort the sample this way). A value of 0.0 will replace the audio in the loop with the incoming audio. There is no limit on the multiplier so you can create out of phase samples (negative values) or distorted samples (by using very high overdub amounts).
                   </description>
             </method>
             <method name="play">
@@ -161,7 +161,7 @@
                         Start recording
                   </digest>
                   <description>
-                        Starts recording (or overdubbing), or plays if already in a recording state.
+                        Begins recording into the <o>karma~</o> <o>buffer~</o>. If the object is in a stopped state, a <m>record</m> message will begin recording a new loop. If the object is in a playing state, a <m>record</m> message will begin overdubbing. If the object is in an overdubbing state, a <m>record</m> message will put the object in a playing state.
                   </description>
             </method>
             <method name="resetloop">
@@ -184,7 +184,8 @@
                         Set a (new) <o>buffer~</o> reference
                   </digest>
                   <description>
-                        Set a (new) <o>buffer~</o> reference for recording or playback, with optional initial loop points. <o>karma~</o> can switch buffers in real time. <m>set {buffername}</m> with no other arguments sets (new) <o>buffer~</o> reference and (re)sets loop points to entire <o>buffer~</o> length. <m>set {buffername}</m> followed by two floats sets a new <o>buffer~</o> with new start/end loop points in milliseconds. <m>set {buffername}</m> followed by two floats and a further <m>symbol</m> sets the units the float arguments are representing. This units symbol can be one of:<br/>
+                        Set a (new) <o>buffer~</o> reference for recording or playback, with optional initial loop points. <o>karma~</o> can switch buffers in real time. <m>set {buffername}</m> with no other arguments sets (new) <o>buffer~</o> reference and (re)sets loop points to entire <o>buffer~</o> length. <m>set {buffername}</m> followed by two floats sets a new <o>buffer~</o> with new start/end loop points in milliseconds. <m>set {buffername}</m> followed by two floats and a further <m>symbol</m> sets the units the float arguments are representing. <br />
+                        This units symbol can be one of:<br/>
                         <m>phase</m> or <m>ph</m>, representing normalised values 0..1<br/>
                         <m>samples</m> or <m>samps</m>, representing values given in samples<br/>
                         <m>milliseconds</m> or <m>ms</m>, representing values given in milliseconds (default)<br/>
@@ -208,7 +209,7 @@
                         Stop transport
                   </digest>
                   <description>
-                        Stops the <o>karma~</o> internal transport immediately.
+                        Stops <o>karma~</o> playback or recording immediately. If the creation of an initial loop is ended with a <m>stop</m> message, it will also define the beginning and end points for the loop.
                   </description>
             </method>
             <method name="window">
@@ -292,7 +293,7 @@
                         <attribute name="default" get="1" set="1" type="int" size="1" value="256" />
                   </attributelist>
             </attribute>
-            <attribute name="syncout" get="1" set="0" type="int" size="1">
+            <attribute name="syncout" get="1" set="1" type="int" size="1">
                   <digest>
                         Create an audio rate sync outlet
                   </digest>
