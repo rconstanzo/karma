@@ -1,0 +1,5 @@
+{
+	"name" : "Karma Snippets",
+	"type" : "filelist",
+	"contents" : [ "karma~waveform_display.maxsnip" ]
+}
