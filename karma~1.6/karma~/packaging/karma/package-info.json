@@ -16,7 +16,7 @@
 		}
 ,
 		"windows" : 		{
-			"platform" : [ "ia32", "x64" ],
+			"platform" : [ "x64" ],
 			"min_version" : "none"
 		}
 

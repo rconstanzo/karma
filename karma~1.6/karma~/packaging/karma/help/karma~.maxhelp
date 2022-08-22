@@ -2964,6 +2964,22 @@
 						"assistshowspatchername" : 0,
 						"boxes" : [ 							{
 								"box" : 								{
+									"border" : 0,
+									"filename" : "helpargs.js",
+									"id" : "obj-15",
+									"ignoreclick" : 1,
+									"jsarguments" : [ "karma~" ],
+									"maxclass" : "jsui",
+									"numinlets" : 1,
+									"numoutlets" : 1,
+									"outlettype" : [ "" ],
+									"parameter_enable" : 0,
+									"patching_rect" : [ 195.978058000000004, 375.005248999999992, 163.592498779296875, 54.0 ]
+								}
+
+							}
+, 							{
+								"box" : 								{
 									"hidden" : 1,
 									"id" : "obj-3",
 									"maxclass" : "newobj",
@@ -3428,66 +3444,6 @@
 									"patching_rect" : [ 40.226165999999999, 268.603821000000039, 49.0, 40.0 ],
 									"text" : "play",
 									"textjustification" : 1
-								}
-
-							}
-, 							{
-								"box" : 								{
-									"angle" : 270.0,
-									"arrow_orientation" : 1,
-									"bgcolor" : [ 0.425432682037354, 0.425419926643372, 0.425427138805389, 1.0 ],
-									"id" : "obj-126",
-									"maxclass" : "panel",
-									"mode" : 0,
-									"numinlets" : 1,
-									"numoutlets" : 0,
-									"patching_rect" : [ 200.232422000000014, 377.316649999999981, 23.320862000000002, 15.124814000000001 ],
-									"proportion" : 0.39,
-									"shape" : 3
-								}
-
-							}
-, 							{
-								"box" : 								{
-									"fontname" : "Lato",
-									"fontsize" : 13.0,
-									"id" : "obj-128",
-									"linecount" : 2,
-									"maxclass" : "comment",
-									"numinlets" : 1,
-									"numoutlets" : 0,
-									"patching_rect" : [ 222.050536999999991, 391.0, 201.0, 38.0 ],
-									"text" : "buffer-name (symbol)\nnumber-of-outputs (int) (optional)",
-									"textcolor" : [ 0.847058823529412, 0.847058823529412, 0.847058823529412, 1.0 ]
-								}
-
-							}
-, 							{
-								"box" : 								{
-									"fontname" : "Lato",
-									"fontsize" : 13.0,
-									"id" : "obj-129",
-									"maxclass" : "comment",
-									"numinlets" : 1,
-									"numoutlets" : 0,
-									"patching_rect" : [ 222.141479000000004, 376.454589999999996, 115.0, 22.0 ],
-									"text" : "Arguments:",
-									"textcolor" : [ 0.150563, 0.150559, 0.150561, 1.0 ]
-								}
-
-							}
-, 							{
-								"box" : 								{
-									"angle" : 270.0,
-									"arrow_orientation" : 1,
-									"bgcolor" : [ 0.425432682037354, 0.425419926643372, 0.425427138805389, 1.0 ],
-									"id" : "obj-130",
-									"maxclass" : "panel",
-									"mode" : 0,
-									"numinlets" : 1,
-									"numoutlets" : 0,
-									"patching_rect" : [ 220.210570999999987, 375.316649999999981, 206.839966000000004, 55.683411 ],
-									"proportion" : 0.5
 								}
 
 							}
