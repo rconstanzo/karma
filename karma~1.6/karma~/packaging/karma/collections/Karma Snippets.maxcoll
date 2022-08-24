@@ -1,5 +1,5 @@
 {
 	"name" : "Karma Snippets",
 	"type" : "filelist",
-	"contents" : [ "karma~waveform_display.maxsnip" ]
+	"contents" : [ "karma~looper_mono.maxsnip", "karma~looper_stereo.maxsnip", "karma~waveform_display.maxsnip" ]
 }

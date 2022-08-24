@@ -26,7 +26,7 @@
 	"version" : "1.6.0",
 	"website" : "http://www.rodrigoconstanzo.com/karma",
 	"filelist" : 	{
-		"externals" : [ "karma~.mxe", "karma~.mxe64", "karma~.mxo" ],
+		"externals" : [ "karma~.mxe64", "karma~.mxo" ],
 		"extras" : [ "karma_overview.maxpat" ],
 		"help" : [ "karma~.maxhelp" ]
 	}
