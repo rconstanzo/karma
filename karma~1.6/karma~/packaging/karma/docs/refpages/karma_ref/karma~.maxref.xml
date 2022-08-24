@@ -100,7 +100,8 @@
                         (get ready for) append recording
                   </digest>
                   <description>
-                        Sending a message of <m>append</m> will put karma back in it's "initial loop creation" state, allowing for new defitions of the loop in/out points. From a stopped state, after creating an initial loop, sending an <m>append</m> message will show the whole <o>buffer~</o> in the GUI showing that the existing loop is ready to be appended. Hitting <m>record</m> will then begin recording where the loop previously ended. You can leave this append state by hitting <m>play</m>, <m>record</m>, or <m>stop</m>. If you send an <m>append</m> message while in a play state, you can play into a new part of the <o>buffer~</o>, and if you send an <m>append</m> message while in an overdub state, you can record into a new part of the buffer.
+                        Sending a message of <m>append</m> will put karma back in it's "initial loop creation" state, allowing for new defitions of the loop in/out points. From a stopped state, after creating an initial loop, sending an <m>append</m> message will show the whole <o>buffer~</o> in the GUI showing that the existing loop is ready to be appended. <br /><br />
+                        Hitting <m>record</m> will then begin recording where the loop previously ended. You can leave this append state by hitting <m>play</m>, <m>record</m>, or <m>stop</m>. If you send an <m>append</m> message while in a play state, you can play into a new part of the <o>buffer~</o>, and if you send an <m>append</m> message while in an overdub state, you can record into a new part of the buffer.
                   </description>
             </method>
             <method name="jump">
@@ -183,7 +184,7 @@
                         Set a (new) <o>buffer~</o> reference
                   </digest>
                   <description>
-                        Set a (new) <o>buffer~</o> reference for recording or playback, with optional initial loop points. <o>karma~</o> can switch buffers in real time. <m>set {buffername}</m> with no other arguments sets (new) <o>buffer~</o> reference and (re)sets loop points to entire <o>buffer~</o> length. <m>set {buffername}</m> followed by two floats sets a new <o>buffer~</o> with new start/end loop points in milliseconds. <m>set {buffername}</m> followed by two floats and a further <m>symbol</m> sets the units the float arguments are representing. <br />
+                        Set a (new) <o>buffer~</o> reference for recording or playback, with optional initial loop points. <o>karma~</o> can switch buffers in real time. <m>set {buffername}</m> with no other arguments sets (new) <o>buffer~</o> reference and (re)sets loop points to entire <o>buffer~</o> length. <m>set {buffername}</m> followed by two floats sets a new <o>buffer~</o> with new start/end loop points in milliseconds. <m>set {buffername}</m> followed by two floats and a further <m>symbol</m> sets the units the float arguments are representing. <br /><br />
                         This units symbol can be one of:<br/>
                         <m>phase</m> or <m>ph</m>, representing normalised values 0..1<br/>
                         <m>samples</m> or <m>samps</m>, representing values given in samples<br/>
@@ -230,7 +231,7 @@
                         Playback interpolation type
                   </digest>
                   <description>
-                        Sets the <b>interpolation</b> mode used during playback. A setting of <m>interp 0</m> will only allow linear interpolation to be used at all times. The default setting of <m>interp 1</m> will use linear interpolation whilest recording and cubic interpolation during regular playback. This is most noticable when switching between overdub and playback and slower playback speeds as one can hear the aliasing more with playback that uses linear interpolation. <m>interp 2</m> is the same as <m>1</m> but for spline interpolation during playback.<br/>
+                        Sets the <b>interpolation</b> mode used during playback. A setting of <m>interp 0</m> will only allow linear interpolation to be used at all times. The default setting of <m>interp 1</m> will use linear interpolation whilest recording and cubic interpolation during regular playback. This is most noticable when switching between overdub and playback and slower playback speeds as one can hear the aliasing more with playback that uses linear interpolation. <m>interp 2</m> is the same as <m>1</m> but for spline interpolation during playback.<br/><br />
                         Available options:<br/>
                         0 = <b>linear</b><br/>
                         1 = <b>cubic</b><br/>
@@ -267,7 +268,7 @@
                         Curve type for 'Switch and Ramp' function
                   </digest>
                   <description>
-                        Applies easing functions to the 'Switch and Ramp' algorithm to allow for different in and out curves.<br/>
+                        Applies easing functions to the 'Switch and Ramp' algorithm to allow for different in and out curves.<br/><br />
                         The different curve types available are:<br/>
                         0 = <b>linear</b><br/>
                         1 = <b>sine</b><br/>
@@ -297,7 +298,8 @@
                         Create an audio rate sync outlet
                   </digest>
                   <description>
-                        Set as <m>integer</m> flag <b>0</b> or <b>1</b>. With <m>syncout</m> switched on, <o>karma~</o> will add an additional audio signal outlet to the object, after the audio outs and before the final data outlet. This outlet is an audio rate sync signal 0..1 for audio rate synchronous matching to other MSP processes. With <m>syncout</m> switched off (the default), <o>karma~</o> will have no additional outlets. <b>This attribute cannot be sent to the object dynamically or changed in the inspector, it is only available at instantiation time</b>.
+                        Set as <m>integer</m> flag <b>0</b> or <b>1</b>. With <m>syncout</m> switched on, <o>karma~</o> will add an additional audio signal outlet to the object, after the audio outs and before the final data outlet. This outlet is an audio rate sync signal 0..1 for audio rate synchronous matching to other MSP processes. With <m>syncout</m> switched off (the default), <o>karma~</o> will have no additional outlets. <br /><br />
+                        <b>This attribute cannot be sent to the object dynamically or changed in the inspector, it is only available at instantiation time</b>.
                   </description>
                   <attributelist>
                         <attribute name="default" get="1" set="1" type="int" size="1" value="0" />
