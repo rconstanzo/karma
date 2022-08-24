@@ -1523,11 +1523,29 @@
 						"assistshowspatchername" : 0,
 						"boxes" : [ 							{
 								"box" : 								{
+									"align" : 1,
+									"allowdrag" : 0,
+									"id" : "obj-5",
+									"ignoreclick" : 1,
+									"items" : [ "stop", ",", "play", ",", "record", ",", "overdub", ",", "append", ",", "initial" ],
+									"maxclass" : "umenu",
+									"menumode" : 2,
+									"numinlets" : 1,
+									"numoutlets" : 3,
+									"outlettype" : [ "int", "", "" ],
+									"parameter_enable" : 0,
+									"patching_rect" : [ 639.388733000000002, 533.858703999999989, 75.0, 22.0 ],
+									"textjustification" : 1
+								}
+
+							}
+, 							{
+								"box" : 								{
 									"id" : "obj-103",
 									"maxclass" : "newobj",
 									"numinlets" : 1,
-									"numoutlets" : 4,
-									"outlettype" : [ "", "", "", "" ],
+									"numoutlets" : 5,
+									"outlettype" : [ "", "", "", "", "" ],
 									"patcher" : 									{
 										"fileversion" : 1,
 										"appversion" : 										{
@@ -1569,12 +1587,37 @@
 										"assistshowspatchername" : 0,
 										"boxes" : [ 											{
 												"box" : 												{
+													"id" : "obj-2",
+													"linecount" : 2,
+													"maxclass" : "comment",
+													"numinlets" : 1,
+													"numoutlets" : 0,
+													"patching_rect" : [ 972.499999999999773, 651.563599000000067, 71.0, 33.0 ],
+													"presentation_linecount" : 2,
+													"text" : "current state"
+												}
+
+											}
+, 											{
+												"box" : 												{
+													"comment" : "waveform~ inlet 4",
+													"id" : "obj-3",
+													"index" : 5,
+													"maxclass" : "outlet",
+													"numinlets" : 1,
+													"numoutlets" : 0,
+													"patching_rect" : [ 938.999999999999886, 653.063598999999726, 30.0, 30.0 ]
+												}
+
+											}
+, 											{
+												"box" : 												{
 													"id" : "obj-27",
 													"linecount" : 4,
 													"maxclass" : "comment",
 													"numinlets" : 1,
 													"numoutlets" : 0,
-													"patching_rect" : [ 605.000000000000114, 46.0, 247.0, 60.0 ],
+													"patching_rect" : [ 605.000000000000114, 46.0, 250.0, 60.0 ],
 													"text" : "Process messages to have waveform~ display the appropriate sample, position, and selection without needing to use additional UI objects."
 												}
 
@@ -1586,7 +1629,7 @@
 													"maxclass" : "comment",
 													"numinlets" : 1,
 													"numoutlets" : 0,
-													"patching_rect" : [ 668.0, 651.563599000000067, 70.0, 33.0 ],
+													"patching_rect" : [ 668.0, 651.563599000000067, 71.0, 33.0 ],
 													"text" : "waveform~ inlet 4"
 												}
 
@@ -1598,7 +1641,7 @@
 													"maxclass" : "comment",
 													"numinlets" : 1,
 													"numoutlets" : 0,
-													"patching_rect" : [ 418.51190476190493, 651.563599000000067, 70.0, 33.0 ],
+													"patching_rect" : [ 418.51190476190493, 651.563599000000067, 71.0, 33.0 ],
 													"text" : "waveform~ inlet 3"
 												}
 
@@ -1610,7 +1653,7 @@
 													"maxclass" : "comment",
 													"numinlets" : 1,
 													"numoutlets" : 0,
-													"patching_rect" : [ 216.000000000000114, 651.563599000000067, 70.0, 33.0 ],
+													"patching_rect" : [ 216.000000000000114, 651.563599000000067, 71.0, 33.0 ],
 													"text" : "waveform~ inlet 2"
 												}
 
@@ -1622,7 +1665,7 @@
 													"maxclass" : "comment",
 													"numinlets" : 1,
 													"numoutlets" : 0,
-													"patching_rect" : [ 41.0, 651.563599000000067, 70.0, 33.0 ],
+													"patching_rect" : [ 41.0, 651.563599000000067, 71.0, 33.0 ],
 													"text" : "waveform~ inlet 1"
 												}
 
@@ -2209,6 +2252,14 @@
 											}
 , 											{
 												"patchline" : 												{
+													"destination" : [ "obj-3", 0 ],
+													"midpoints" : [ 545.976190476190595, 211.583035772727158, 948.499999999999886, 211.583035772727158 ],
+													"source" : [ "obj-94", 6 ]
+												}
+
+											}
+, 											{
+												"patchline" : 												{
 													"destination" : [ "obj-37", 0 ],
 													"order" : 0,
 													"source" : [ "obj-94", 4 ]
@@ -2233,7 +2284,7 @@
  ]
 									}
 ,
-									"patching_rect" : [ 289.388733000000002, 533.858703999999989, 255.0, 22.0 ],
+									"patching_rect" : [ 289.388733000000002, 533.858703999999989, 333.0, 22.0 ],
 									"saved_object_attributes" : 									{
 										"description" : "",
 										"digest" : "",
@@ -2710,6 +2761,13 @@
 							}
  ],
 						"lines" : [ 							{
+								"patchline" : 								{
+									"destination" : [ "obj-5", 0 ],
+									"source" : [ "obj-103", 4 ]
+								}
+
+							}
+, 							{
 								"patchline" : 								{
 									"destination" : [ "obj-72", 3 ],
 									"source" : [ "obj-103", 3 ]
@@ -4306,9 +4364,9 @@
 									"allowdrag" : 0,
 									"autopopulate" : 1,
 									"fontsize" : 20.0,
-									"frozen_box_attributes" : [ "types", "showdotfiles", "parameter_mappable", "prefix_mode", "menumode" ],
+									"frozen_box_attributes" : [ "parameter_mappable", "showdotfiles", "types", "menumode", "prefix_mode" ],
 									"id" : "obj-5",
-									"items" : "<empty>",
+									"items" : [ "karma_example.basic_looper.maxpat", ",", "karma_example.granular-ish.maxpat", ",", "karma_example.kitchen_sink.maxpat", ",", "karma_example.kitchen_sink_stereo.maxpat", ",", "karma_example.rajas_lil_xfadetable_synth.maxpat", ",", "karma_example.synthesis.maxpat", ",", "karma_example.to_click_or_not_to_click.maxpat" ],
 									"maxclass" : "umenu",
 									"menumode" : 0,
 									"numinlets" : 1,
