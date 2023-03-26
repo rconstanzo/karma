@@ -23,7 +23,7 @@
 	}
 ,
 	"tags" : [ "audio", "externals" ],
-	"version" : "1.6.0",
+	"version" : "1.6.1",
 	"website" : "http://www.rodrigoconstanzo.com/karma",
 	"filelist" : 	{
 		"externals" : [ "karma~.mxe64", "karma~.mxo" ],
